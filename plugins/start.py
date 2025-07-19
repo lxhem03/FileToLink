@@ -20,7 +20,7 @@ async def start(client, message):
         InlineKeyboardButton('• ʜᴇʟᴘ •', callback_data='help')],
         [InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url='https://telegram.me/The_TGguy')]
     ])
-    await client.reply_photo(
+    await client.send_photo(
         chat_id=message.from_user.id,
         photo=START_IMG,
         caption=script.START_TXT.format(message.from_user.mention),
@@ -70,3 +70,74 @@ async def stream_start(client, message):
     msg_text = """<i><u>𝗬𝗼𝘂𝗿 𝗟𝗶𝗻𝗸 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗲𝗱 !</u></i>\n\n<b>📂 Fɪʟᴇ ɴᴀᴍᴇ :</b> <i>{}</i>\n\n<b>📦 Fɪʟᴇ ꜱɪᴢᴇ :</b> <i>{}</i>\n\n<b>📥 Dᴏᴡɴʟᴏᴀᴅ :</b> <code>{}</code>\n\n<b> 🖥ᴡᴀᴛᴄʜ  :</b> <code>{}</code>\n\n<b>🚸 Nᴏᴛᴇ : ʟɪɴᴋ ᴡᴏɴ'ᴛ ᴇxᴘɪʀᴇ ᴛɪʟʟ ɪ ᴅᴇʟᴇᴛᴇ</b>"""
 
     await message.reply_text(text=msg_text.format(get_name(log_msg), humanbytes(get_media_file_size(message)), download, stream), quote=True, disable_web_page_preview=True, reply_markup=rm)
+
+
+@Client.on_callback_query()
+async def cb_handler(client, query: CallbackQuery):
+    data = query.data 
+    if data == "start":
+        await query.message.edit_text(
+            text=Txt.START_TXT.format(query.from_user.mention),
+            disable_web_page_preview=True,
+            reply_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton('• ᴀʙᴏᴜᴛ •', callback_data='about'),
+                InlineKeyboardButton('• ʜᴇʟᴘ •', callback_data='help')],
+                [InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url='https://telegram.me/The_TGguy')]
+            ])
+        )
+    elif data == "help":
+        await query.message.edit_text(
+            text=Txt.HELP_TXT,
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([
+		[InlineKeyboardButton("• ᴀʙᴏᴜᴛ •", callback_data = "about")],
+                [InlineKeyboardButton("💥  ᴅᴏɴᴀᴛᴇ", callback_data = "donate"),
+                InlineKeyboardButton("", callback_data = "source")],
+		[InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url="https://t.me/The_TGguy")],
+		[InlineKeyboardButton("ʜᴏᴍᴇ", callback_data = "start"),
+         InlineKeyboardbutton("ᴄʟᴏsᴇ", callback_data="close"]
+            ])            
+    )
+
+    
+    elif data == "about":
+        await query.message.edit_text(
+            text=script.ABOUT_TXT,
+            disable_web_page_preview = True,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("", callback_data="source"),
+                InlineKeyboardButton("💥  ᴅᴏɴᴀᴛᴇ", callback_data="donate")],
+		[InlineKeyboardButton("ʜᴏᴍᴇ", callback_data="start")]
+            ])            
+        )
+
+    elif data == "source":
+        await query.message.edit_text(
+            text=script.SOURCE_TXT,
+            disable_web_page_preview = True,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("• ᴀʙᴏᴜᴛ •", callback_data="about"),
+                InlineKeyboardButton("• ʜᴇʟᴘ •", callback_data="help")],
+		[InlineKeyboardButton("ʜᴏᴍᴇ", callback_data="start")]
+            ])            
+        )    
+
+    elif data == "donate":
+        await query.message.edit_text(
+            text=script.DONATE_TXT,
+            disable_web_page_preview = True,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("ʙᴀᴄᴋ", callback_data = "start"),
+                InlineKeyboardButton("ᴄʟᴏsᴇ", callback_data = "close")]
+            ])            
+	)
+
+    elif data == "close":
+        try:
+            await query.message.delete()
+            await query.message.reply_to_message.delete()
+            await query.message.continue_propagation()
+        except:
+            await query.message.delete()
+            await query.message.continue_propagation()
+        
