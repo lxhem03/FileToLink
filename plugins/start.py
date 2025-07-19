@@ -15,15 +15,16 @@ async def start(client, message):
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
         await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
-    rm = InlineKeyboardMarkup(
-        [[
-            InlineKeyboardButton("✨ Update Channel", url="https://t.me/The_TGguy")
-        ]] 
-    )
-    await client.send_message(
+    button = InlineKeyboardMarkup([
+        [InlineKeyboardButton('• ᴀʙᴏᴜᴛ •', callback_data='about'),
+        InlineKeyboardButton('• ʜᴇʟᴘ •', callback_data='help')],
+        [InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url='https://telegram.me/The_TGguy')]
+    ])
+    await client.reply_photo(
         chat_id=message.from_user.id,
-        text=script.START_TXT.format(message.from_user.mention),
-        reply_markup=rm,
+        photo=START_IMG,
+        caption=script.START_TXT.format(message.from_user.mention),
+        reply_markup=button,
         parse_mode=enums.ParseMode.HTML,
         disable_web_page_preview=True
     )
