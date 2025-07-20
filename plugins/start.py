@@ -77,7 +77,7 @@ async def cb_handler(client, query: CallbackQuery):
     data = query.data 
     if data == "start":
         await query.message.edit_text(
-            text=Txt.START_TXT.format(query.from_user.mention),
+            text=script.START_TXT.format(query.from_user.mention),
             disable_web_page_preview=True,
             reply_markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton('• ᴀʙᴏᴜᴛ •', callback_data='about'),
@@ -105,8 +105,9 @@ async def cb_handler(client, query: CallbackQuery):
             text=script.ABOUT_TXT,
             disable_web_page_preview = True,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("", callback_data="source"),
-                InlineKeyboardButton("💥  ᴅᴏɴᴀᴛᴇ", callback_data="donate")],
+                [InlineKeyboardButton("• Sᴏᴜʀᴄᴇ •", callback_data="source"),
+		 InlineKeyboardButton("", callback_data="devs")],
+                [InlineKeyboardButton("💥  ᴅᴏɴᴀᴛᴇ", callback_data="donate")],
 		[InlineKeyboardButton("ʜᴏᴍᴇ", callback_data="start")]
             ])            
         )
@@ -121,7 +122,18 @@ async def cb_handler(client, query: CallbackQuery):
 		[InlineKeyboardButton("ʜᴏᴍᴇ", callback_data="start")]
             ])            
         )    
-
+	    
+    elif data == "devs":
+        await query.message.edit_text(
+            text=script.DEVS_TXT,
+            disable_web_page_preview = True,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("• ᴀʙᴏᴜᴛ •", callback_data="about"),
+                InlineKeyboardButton("• ʜᴇʟᴘ •", callback_data="help")],
+		[InlineKeyboardButton("ʜᴏᴍᴇ", callback_data="start")]
+            ])            
+        )    
+	    
     elif data == "donate":
         await query.message.edit_text(
             text=script.DONATE_TXT,
