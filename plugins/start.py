@@ -78,6 +78,7 @@ async def cb_handler(client, query: CallbackQuery):
     if data == "start":
         await query.message.edit_text(
             text=script.START_TXT.format(query.from_user.mention),
+			parse_mode=enums.ParseMode.HTML,
             disable_web_page_preview=True,
             reply_markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton('• ᴀʙᴏᴜᴛ •', callback_data='about'),
@@ -88,6 +89,7 @@ async def cb_handler(client, query: CallbackQuery):
     elif data == "help":
         await query.message.edit_text(
             text=Txt.HELP_TXT,
+			parse_mode=enums.ParseMode.HTML,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([
 		[InlineKeyboardButton("• ᴀʙᴏᴜᴛ •", callback_data = "about")],
@@ -103,6 +105,7 @@ async def cb_handler(client, query: CallbackQuery):
     elif data == "about":
         await query.message.edit_text(
             text=script.ABOUT_TXT,
+			parse_mode=enums.ParseMode.HTML,
             disable_web_page_preview = True,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("• Sᴏᴜʀᴄᴇ •", callback_data="source"),
@@ -115,6 +118,7 @@ async def cb_handler(client, query: CallbackQuery):
     elif data == "source":
         await query.message.edit_text(
             text=script.SOURCE_TXT,
+			parse_mode=enums.ParseMode.HTML,
             disable_web_page_preview = True,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("• ᴀʙᴏᴜᴛ •", callback_data="about"),
@@ -126,6 +130,7 @@ async def cb_handler(client, query: CallbackQuery):
     elif data == "devs":
         await query.message.edit_text(
             text=script.DEVS_TXT,
+			parse_mode=enums.ParseMode.HTML,
             disable_web_page_preview = True,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("• ᴀʙᴏᴜᴛ •", callback_data="about"),
@@ -137,6 +142,7 @@ async def cb_handler(client, query: CallbackQuery):
     elif data == "donate":
         await query.message.edit_text(
             text=script.DONATE_TXT,
+			parse_mode=enums.ParseMode.HTML,
             disable_web_page_preview = True,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("ʙᴀᴄᴋ", callback_data = "start"),
