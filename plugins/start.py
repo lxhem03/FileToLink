@@ -98,7 +98,7 @@ async def cb_handler(client, query: CallbackQuery):
 		[InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url="https://t.me/The_TGguy")],
 		[InlineKeyboardButton("ʜᴏᴍᴇ", callback_data = "start"),
          InlineKeyboardbutton("ᴄʟᴏsᴇ", callback_data="close")
-            ])            
+		]])            
     )
 
     
