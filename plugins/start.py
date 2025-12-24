@@ -58,7 +58,7 @@ async def start(client, message):
                     caption=script.START_TXT.format(username),
                     reply_markup=button,
                     parse_mode=enums.ParseMode.HTML,
-                    link_preview_options={"is_disabled": True}
+                    disable_web_page_preview=True
                 )
             else:
                 logger.info(f"Sending start photo using file_id for user {user_id}")
@@ -76,7 +76,7 @@ async def start(client, message):
                 text=script.START_TXT.format(username),
                 reply_markup=button,
                 parse_mode=enums.ParseMode.HTML,
-                link_preview_options={"is_disabled": True}
+                disable_web_page_preview=True
             )
 
         logger.info(f"/start command successfully processed for {user_id}")
