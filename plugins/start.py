@@ -58,7 +58,7 @@ async def start(client, message):
                     caption=script.START_TXT.format(username),
                     reply_markup=button,
                     parse_mode=enums.ParseMode.HTML,
-                    disable_web_page_preview=True
+                    link_preview_options={"is_disabled": True}
                 )
             else:
                 logger.info(f"Sending start photo using file_id for user {user_id}")
@@ -76,7 +76,7 @@ async def start(client, message):
                 text=script.START_TXT.format(username),
                 reply_markup=button,
                 parse_mode=enums.ParseMode.HTML,
-                disable_web_page_preview=True
+                link_preview_options={"is_disabled": True}
             )
 
         logger.info(f"/start command successfully processed for {user_id}")
@@ -86,9 +86,10 @@ async def start(client, message):
         # Fallback: send plain text if photo fails
         try:
             await message.reply_text(
-                text=f"Hello {username} 👋\n\n{script.START_TXT.format(username)}",
+                text=f"{script.START_TXT.format(username)}",
                 reply_markup=button,
-                parse_mode=enums.ParseMode.HTML
+                parse_mode=enums.ParseMode.HTML,
+				link_preview_options={"is_disabled": True}
             )
             logger.info(f"Fallback text message sent to {user_id}")
         except Exception as fallback_err:
