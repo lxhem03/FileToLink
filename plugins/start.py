@@ -1,5 +1,6 @@
 import random
 import humanize
+import logging
 from Script import script
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ForceReply, CallbackQuery
@@ -10,25 +11,88 @@ from TechVJ.util.human_readable import humanbytes
 from database.users_chats_db import db
 from utils import temp, get_shortlink
 
+# ==================== LOGGING SETUP ====================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("bot.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+# =======================================================
+
 @Client.on_message(filters.private & filters.command("start"))
 async def start(client, message):
-    if not await db.is_user_exist(message.from_user.id):
-        await db.add_user(message.from_user.id, message.from_user.first_name)
-        await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
-    button = InlineKeyboardMarkup([
-        [InlineKeyboardButton('• ᴀʙᴏᴜᴛ •', callback_data='about'),
-        InlineKeyboardButton('• ʜᴇʟᴘ •', callback_data='help')],
-        [InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url='https://telegram.me/The_TGguy')]
-    ])
-    await client.send_photo(
-        chat_id=message.from_user.id,
-        photo=START_IMG,
-        caption=script.START_TXT.format(message.from_user.mention),
-        reply_markup=button,
-        parse_mode=enums.ParseMode.HTML,
-        disable_web_page_preview=True
-    )
-    return
+    user_id = message.from_user.id
+    username = message.from_user.mention
+    logger.info(f"/start command received from user: {user_id} ({username})")
+
+    try:
+        if not await db.is_user_exist(user_id):
+            await db.add_user(user_id, message.from_user.first_name)
+            logger.info(f"New user added to DB: {user_id} - {message.from_user.first_name}")
+            try:
+                await client.send_message(
+                    LOG_CHANNEL,
+                    script.LOG_TEXT_P.format(user_id, username)
+                )
+                logger.info(f"New user log sent to LOG_CHANNEL for {user_id}")
+            except Exception as log_err:
+                logger.error(f"Failed to send new user log to LOG_CHANNEL: {log_err}")
+
+        button = InlineKeyboardMarkup([
+            [InlineKeyboardButton('• ᴀʙᴏᴜᴛ •', callback_data='about'),
+             InlineKeyboardButton('• ʜᴇʟᴘ •', callback_data='help')],
+            [InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url='https://telegram.me/The_TGguy')]
+        ])
+
+        # Handle START_IMG: supports URL or file_id, with fallback
+        if START_IMG:
+            if START_IMG.startswith(("http://", "https://")):
+                logger.info(f"Sending start photo from URL for user {user_id}")
+                await client.send_photo(
+                    chat_id=user_id,
+                    photo=START_IMG,
+                    caption=script.START_TXT.format(username),
+                    reply_markup=button,
+                    parse_mode=enums.ParseMode.HTML,
+                    disable_web_page_preview=True
+                )
+            else:
+                logger.info(f"Sending start photo using file_id for user {user_id}")
+                await client.send_photo(
+                    chat_id=user_id,
+                    photo=START_IMG,
+                    caption=script.START_TXT.format(username),
+                    reply_markup=button,
+                    parse_mode=enums.ParseMode.HTML,
+                    disable_web_page_preview=True
+                )
+        else:
+            logger.warning(f"START_IMG is empty, sending text-only start message to {user_id}")
+            await message.reply_text(
+                text=script.START_TXT.format(username),
+                reply_markup=button,
+                parse_mode=enums.ParseMode.HTML,
+                disable_web_page_preview=True
+            )
+
+        logger.info(f"/start command successfully processed for {user_id}")
+
+    except Exception as e:
+        logger.error(f"Error in /start handler for user {user_id}: {str(e)}", exc_info=True)
+        # Fallback: send plain text if photo fails
+        try:
+            await message.reply_text(
+                text=f"Hello {username} 👋\n\n{script.START_TXT.format(username)}",
+                reply_markup=button,
+                parse_mode=enums.ParseMode.HTML
+            )
+            logger.info(f"Fallback text message sent to {user_id}")
+        except Exception as fallback_err:
+            logger.critical(f"Even fallback failed for {user_id}: {fallback_err}")
 
 
 @Client.on_message(filters.private & (filters.document | filters.video))
