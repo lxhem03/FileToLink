@@ -10,7 +10,7 @@ from TechVJ.util.human_readable import humanbytes
 from database.users_chats_db import db
 from utils import temp, get_shortlink
 
-@Client.on_message(filters.command("start") & filters.incoming)
+@Client.on_message(filters.private & filters.command("start"))
 async def start(client, message):
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
