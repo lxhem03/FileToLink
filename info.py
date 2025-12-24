@@ -21,7 +21,7 @@ if 'DYNO' in environ:
 else:
     ON_HEROKU = False
 URL = environ.get("URL", "")
-START_IMG =environ.get("START_IMG", "")
+START_IMG = environ.get("START_IMG", "https://files.catbox.moe/lllex3.jpg")
 
 # Admins, Channels & Users
 LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-1002458319512'))
