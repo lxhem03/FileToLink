@@ -29,6 +29,12 @@ async def start(client, message):
     username = message.from_user.mention
     logger.info(f"/start command received from user: {user_id} ({username})")
 
+    button = InlineKeyboardMarkup([
+        [InlineKeyboardButton('• ᴀʙᴏᴜᴛ •', callback_data='about'),
+            InlineKeyboardButton('• ʜᴇʟᴘ •', callback_data='help')],
+        [InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url='https://telegram.me/The_TGguy')]
+    ])
+
     try:
         if not await db.is_user_exist(user_id):
             await db.add_user(user_id, message.from_user.first_name)
@@ -42,42 +48,15 @@ async def start(client, message):
             except Exception as log_err:
                 logger.error(f"Failed to send new user log to LOG_CHANNEL: {log_err}")
 
-        button = InlineKeyboardMarkup([
-            [InlineKeyboardButton('• ᴀʙᴏᴜᴛ •', callback_data='about'),
-             InlineKeyboardButton('• ʜᴇʟᴘ •', callback_data='help')],
-            [InlineKeyboardButton("💝 Uᴘᴅᴀᴛᴇs 💝", url='https://telegram.me/The_TGguy')]
-        ])
-
-        # Handle START_IMG: supports URL or file_id, with fallback
-        if START_IMG:
-            if START_IMG.startswith(("http://", "https://")):
-                logger.info(f"Sending start photo from URL for user {user_id}")
-                await client.send_photo(
-                    chat_id=user_id,
-                    photo=START_IMG,
-                    caption=script.START_TXT.format(username),
-                    reply_markup=button,
-                    parse_mode=enums.ParseMode.HTML,
-                    disable_web_page_preview=True
-                )
-            else:
-                logger.info(f"Sending start photo using file_id for user {user_id}")
-                await client.send_photo(
-                    chat_id=user_id,
-                    photo=START_IMG,
-                    caption=script.START_TXT.format(username),
-                    reply_markup=button,
-                    parse_mode=enums.ParseMode.HTML,
-                    disable_web_page_preview=True
-                )
-        else:
-            logger.warning(f"START_IMG is empty, sending text-only start message to {user_id}")
-            await message.reply_text(
-                text=script.START_TXT.format(username),
-                reply_markup=button,
-                parse_mode=enums.ParseMode.HTML,
-                disable_web_page_preview=True
-            )
+        
+        logger.info(f"Sending start command for user {user_id}")
+        await client.send_message(
+            chat_id=user_id,
+            text=script.START_TXT.format(username),
+            reply_markup=button,
+            parse_mode=enums.ParseMode.HTML,
+            disable_web_page_preview=True
+		)
 
         logger.info(f"/start command successfully processed for {user_id}")
 
@@ -88,8 +67,7 @@ async def start(client, message):
             await message.reply_text(
                 text=f"{script.START_TXT.format(username)}",
                 reply_markup=button,
-                parse_mode=enums.ParseMode.HTML,
-				link_preview_options={"is_disabled": True}
+                parse_mode=enums.ParseMode.HTML
             )
             logger.info(f"Fallback text message sent to {user_id}")
         except Exception as fallback_err:
