@@ -1,13 +1,26 @@
 FROM python:3.10.8-slim
 
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get install git -y
+# Update packages and install dependencies
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y \
+    git \
+    ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
 COPY requirements.txt /requirements.txt
 
-RUN cd /
-RUN pip3 install -U pip && pip3 install -U -r requirements.txt
+# Install Python dependencies
+RUN pip3 install -U pip && \
+    pip3 install -U -r /requirements.txt
+
+# Create app directory
 RUN mkdir /FileToLink
 WORKDIR /FileToLink
-COPY . /FileToLink
-CMD ["python", "bot.py"]
 
+# Copy project files
+COPY . /FileToLink
+
+# Start bot
+CMD ["python", "bot.py"]
