@@ -1,523 +1,843 @@
-<!-- Streaming page - patched by Nectar -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>{{file_name}}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
-        integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA=="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <!-- FIX 3: Use Plyr CSS for a reliable, well-maintained player with black-screen fix -->
-    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"/>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Josefin Sans', sans-serif;
-            background: #0f0f0f;
-            color: #e0e0e0;
-            min-height: 100vh;
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --accent:  #a855f7;
+            --accent2: #7c3aed;
+            --bg:      #0a0a0f;
+            --card:    #13131f;
+            --border:  #1e1e30;
+            --text:    #e2e8f0;
+            --muted:   #64748b;
+            --radius:  12px;
         }
+
+        html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; }
+
+        /* ════════════════════ NAV ════════════════════ */
         nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 16px 32px;
-            background: rgba(20,20,20,0.95);
-            border-bottom: 1px solid #333;
-            position: sticky;
-            top: 0;
-            z-index: 100;
+            position: sticky; top: 0; z-index: 200;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 24px;
+            background: rgba(10,10,15,0.92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
         }
-        nav h3 { font-size: 1.3rem; color: #7c3aed; letter-spacing: 1px; }
-        nav a { color: #aaa; text-decoration: none; margin-left: 18px; font-size: 0.85rem; }
-        nav a:hover { color: #fff; }
+        .nav-brand { font-size: 1.1rem; font-weight: 600; color: var(--accent); letter-spacing: .5px; }
+        .nav-links a { color: var(--muted); text-decoration: none; font-size: .82rem; margin-left: 16px; transition: color .2s; }
+        .nav-links a:hover { color: var(--text); }
 
-        .main-wrap {
-            max-width: 960px;
-            margin: 36px auto;
-            padding: 0 16px;
-        }
+        /* ════════════════════ LAYOUT ════════════════════ */
+        .page { max-width: 1000px; margin: 0 auto; padding: 28px 16px 60px; }
 
-        /* ── FIX 3: Video container with explicit background so black flash doesn't persist ── */
-        .player-box {
-            background: #000;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+        /* ════════════════════ PLAYER SHELL ════════════════════ */
+        .player-shell {
             position: relative;
+            background: #000;
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,.8);
+            /* Aspect ratio container so player is never 0px tall before metadata */
+            aspect-ratio: 16/9;
         }
-        /* Force Plyr to fill width and avoid sizing bugs that cause black screen */
-        .player-box video,
-        .player-box .plyr {
-            width: 100% !important;
-            height: auto !important;
-            max-height: 540px;
+        #vid {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
             background: #000;
             display: block;
         }
-        /* Override Plyr's default poster behavior so it doesn't hide the video */
-        .plyr__poster { background-size: cover; }
 
-        /* ── Controls panel (audio track / subtitle / speed) ── */
-        .controls-panel {
-            background: #1a1a2e;
-            border-radius: 10px;
-            padding: 18px 22px;
-            margin-top: 18px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 18px;
-            align-items: flex-end;
+        /* ════════════════════ CUSTOM CONTROLS OVERLAY ════════════════════ */
+        /*
+         * We roll a fully custom control bar that looks exactly like Image 2:
+         *   [ ⏪10s ][ ▶ ][ ⏩10s ]  ━━━━━━━●━━━━  0:43 / 24:24  [ 🔇 ][ ⊞ ]
+         * The browser's native controls are hidden.
+         */
+        .controls-overlay {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,.85) 60%);
+            padding: 32px 14px 12px;
+            opacity: 0;
+            transition: opacity .25s;
+            pointer-events: none;
         }
-        .ctrl-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 160px; }
-        .ctrl-group label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+        .player-shell:hover .controls-overlay,
+        .player-shell.ctrl-visible .controls-overlay { opacity: 1; pointer-events: all; }
+
+        /* Progress bar */
+        .progress-wrap {
+            position: relative; height: 4px; background: rgba(255,255,255,.2);
+            border-radius: 4px; cursor: pointer; margin-bottom: 10px;
+            transition: height .15s;
+        }
+        .progress-wrap:hover { height: 6px; }
+        .progress-buf  { position: absolute; inset: 0; background: rgba(255,255,255,.15); border-radius: 4px; width: 0%; }
+        .progress-fill { position: absolute; inset: 0; background: var(--accent); border-radius: 4px; width: 0%; }
+        .progress-thumb {
+            position: absolute; top: 50%; right: -6px; transform: translateY(-50%);
+            width: 13px; height: 13px; border-radius: 50%;
+            background: #fff; box-shadow: 0 0 0 2px var(--accent);
+            transition: transform .15s;
+            pointer-events: none;
+        }
+        .progress-wrap:hover .progress-thumb { transform: translateY(-50%) scale(1.3); }
+
+        /* Bottom bar */
+        .ctrl-bar {
+            display: flex; align-items: center; gap: 4px;
+        }
+        .ctrl-btn {
+            background: none; border: none; color: #fff; cursor: pointer;
+            padding: 6px 8px; border-radius: 6px; font-size: .9rem;
+            transition: background .15s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .ctrl-btn:hover { background: rgba(255,255,255,.12); }
+        .ctrl-btn svg, .ctrl-btn i { pointer-events: none; }
+
+        /* Skip icons (±10) */
+        .skip-label { font-size: .6rem; font-weight: 700; line-height: 1; }
+
+        .time-display { font-size: .78rem; color: rgba(255,255,255,.85); white-space: nowrap; margin: 0 6px; }
+        .spacer { flex: 1; }
+
+        /* Volume slider */
+        .vol-wrap { display: flex; align-items: center; gap: 6px; }
+        .vol-slider {
+            -webkit-appearance: none; appearance: none;
+            width: 72px; height: 3px;
+            background: rgba(255,255,255,.3);
+            border-radius: 3px; outline: none; cursor: pointer;
+        }
+        .vol-slider::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 11px; height: 11px;
+            border-radius: 50%; background: #fff; cursor: pointer;
+        }
+
+        /* Big centre play button (Image 2 style) */
+        .centre-play {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            width: 62px; height: 62px; border-radius: 50%;
+            background: rgba(168,85,247,.85);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: transform .15s, background .15s;
+            pointer-events: all;
+        }
+        .centre-play:hover { transform: translate(-50%,-50%) scale(1.1); background: var(--accent2); }
+        .centre-play svg { width: 26px; height: 26px; fill: #fff; margin-left: 4px; }
+        .centre-play.hidden { display: none; }
+
+        /* Spinner while buffering */
+        .spinner {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+            width: 40px; height: 40px;
+            border: 3px solid rgba(255,255,255,.1);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            display: none;
+        }
+        @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+        /* ════════════════════ TRACK + SPEED PANEL ════════════════════ */
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            margin-top: 14px;
+            display: none; /* shown after metadata loads */
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .panel.visible { display: flex; }
+
+        .ctrl-group { display: flex; flex-direction: column; gap: 7px; flex: 1; min-width: 150px; }
+        .ctrl-group label {
+            font-size: .7rem; font-weight: 600; letter-spacing: .8px;
+            text-transform: uppercase; color: var(--muted);
+            display: flex; align-items: center; gap: 5px;
+        }
         .ctrl-group select {
-            background: #252540;
-            color: #eee;
-            border: 1px solid #444;
-            border-radius: 6px;
-            padding: 8px 10px;
-            font-family: 'Josefin Sans', sans-serif;
-            font-size: 0.9rem;
-            cursor: pointer;
-            outline: none;
+            background: #1a1a2e; color: var(--text);
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: 8px 10px; font-size: .85rem; cursor: pointer; outline: none;
+            font-family: 'Inter', sans-serif;
+            transition: border-color .2s;
         }
-        .ctrl-group select:hover { border-color: #7c3aed; }
-        #no-audio-tracks, #no-sub-tracks {
-            color: #666; font-size: 0.8rem; padding: 8px 0;
-        }
+        .ctrl-group select:focus { border-color: var(--accent); }
+        .ctrl-note { font-size: .72rem; color: var(--muted); margin-top: 2px; }
 
+        /* Loading skeleton for tracks */
+        .track-loading { color: var(--muted); font-size: .8rem; font-style: italic; }
+
+        /* ════════════════════ FILE INFO ════════════════════ */
         .file-info {
-            background: #1a1a2e;
-            border-radius: 10px;
-            padding: 16px 22px;
-            margin-top: 16px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 18px; margin-top: 14px;
+            display: flex; align-items: center; gap: 12px;
         }
-        .file-info h4 { color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
-        .file-info p { color: #ddd; font-size: 0.95rem; word-break: break-all; }
+        .file-icon { font-size: 1.4rem; color: var(--accent); flex-shrink: 0; }
+        .file-meta { overflow: hidden; }
+        .file-meta .fname { font-size: .9rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-meta .fsize { font-size: .75rem; color: var(--muted); margin-top: 2px; }
 
-        /* ── FIX 2: External player buttons with correct deep-link schemes ── */
-        .player-btns {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-top: 18px;
+        /* ════════════════════ EXTERNAL PLAYERS ════════════════════ */
+        .section-label {
+            font-size: .7rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .8px; color: var(--muted); margin: 20px 0 10px;
         }
-        .player-btn {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: #1e1e3a;
-            border: 1px solid #444;
-            border-radius: 8px;
-            padding: 10px 16px;
-            cursor: pointer;
-            color: #ddd;
-            font-family: 'Josefin Sans', sans-serif;
-            font-size: 0.85rem;
-            text-decoration: none;
-            transition: background 0.2s, border-color 0.2s;
+        .ext-btns { display: flex; flex-wrap: wrap; gap: 10px; }
+        .ext-btn {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 9px; padding: 9px 14px;
+            color: var(--text); font-size: .82rem; cursor: pointer;
+            text-decoration: none; font-family: 'Inter', sans-serif;
+            transition: background .2s, border-color .2s, transform .1s;
         }
-        .player-btn:hover { background: #2d2d5a; border-color: #7c3aed; color: #fff; }
-        .player-btn img { height: 26px; width: 26px; object-fit: contain; }
-        .download-btn {
-            background: #1a3a1a;
-            border-color: #2d7a2d;
-        }
-        .download-btn:hover { background: #244d24; border-color: #3da33d; }
+        .ext-btn:hover { background: #1e1e3a; border-color: var(--accent); transform: translateY(-1px); }
+        .ext-btn:active { transform: translateY(0); }
+        .ext-btn img { width: 24px; height: 24px; object-fit: contain; border-radius: 4px; }
+        .ext-btn.dl { background: #0f2a1f; border-color: #1a4a30; }
+        .ext-btn.dl:hover { background: #163a2a; border-color: #2a6a40; }
 
+        /* ════════════════════ TOAST ════════════════════ */
+        #toast {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: #1e1e3a; color: #eee; padding: 10px 20px;
+            border-radius: 8px; font-size: .82rem; border: 1px solid var(--accent);
+            z-index: 9999; display: none; text-align: center;
+            max-width: 90vw; box-shadow: 0 4px 20px rgba(0,0,0,.5);
+        }
+
+        /* ════════════════════ FOOTER ════════════════════ */
         footer {
-            text-align: center;
-            padding: 32px 16px;
-            color: #555;
-            font-size: 0.8rem;
-            border-top: 1px solid #222;
-            margin-top: 48px;
+            text-align: center; padding: 28px 16px;
+            border-top: 1px solid var(--border); margin-top: 48px;
+            font-size: .76rem; color: var(--muted);
         }
-        footer a { color: #7c3aed; text-decoration: none; }
+        footer a { color: var(--accent); text-decoration: none; }
         footer a:hover { text-decoration: underline; }
-        footer .icons { margin: 10px 0; font-size: 1.2rem; }
+
+        /* ════════════════════ RESPONSIVE ════════════════════ */
+        @media (max-width: 540px) {
+            .vol-slider { width: 50px; }
+            .ext-btn { font-size: .78rem; padding: 8px 11px; }
+        }
     </style>
 </head>
 <body>
-    <nav>
-        <h3>Telegram Guy!!</h3>
-        <div>
-            <a href="https://t.me/The_TGguy">Updates</a>
-            <a href="https://telegram.me/TGguy_Ownerobot">Support</a>
+
+<nav>
+    <span class="nav-brand">Telegram Guy!!</span>
+    <div class="nav-links">
+        <a href="https://t.me/The_TGguy">Updates</a>
+        <a href="https://telegram.me/TGguy_Ownerobot">Support</a>
+    </div>
+</nav>
+
+<div class="page">
+
+    <!-- ── PLAYER ── -->
+    <div class="player-shell" id="shell">
+
+        <video id="vid" preload="metadata" playsinline crossorigin="anonymous"></video>
+
+        <div class="spinner" id="spinner"></div>
+
+        <!-- Centre play/pause button (Image 2 style) -->
+        <div class="centre-play" id="centrePlay" onclick="togglePlay()">
+            <!-- Play triangle -->
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         </div>
-    </nav>
 
-    <div class="main-wrap">
+        <!-- Controls overlay -->
+        <div class="controls-overlay" id="ctrlOverlay">
 
-        <!-- ── FIX 3: video element without autoplay; Plyr handles everything ── -->
-        <div class="player-box">
-            <video id="player"
-                   playsinline
-                   controls
-                   crossorigin="anonymous"
-                   preload="metadata">
-                <source src="{{file_url}}" type="video/mp4">
-                <!-- FIX 3: also serve without type so browser picks codec -->
-                <source src="{{file_url}}">
-            </video>
-        </div>
-
-        <!-- ── FIX 5: Audio track / Subtitle / Speed controls ── -->
-        <div class="controls-panel" id="controls-panel" style="display:none;">
-
-            <div class="ctrl-group" id="audio-ctrl-wrap">
-                <label>🔊 Audio Track</label>
-                <select id="audio-track-sel" onchange="changeAudioTrack(this.value)">
-                    <option value="">Loading...</option>
-                </select>
-                <span id="no-audio-tracks"></span>
+            <!-- Progress bar -->
+            <div class="progress-wrap" id="progressWrap">
+                <div class="progress-buf"  id="progressBuf"></div>
+                <div class="progress-fill" id="progressFill">
+                    <div class="progress-thumb"></div>
+                </div>
             </div>
 
-            <div class="ctrl-group" id="sub-ctrl-wrap">
-                <label>💬 Subtitles</label>
-                <select id="subtitle-sel" onchange="changeSubtitle(this.value)">
-                    <option value="-1">Off</option>
-                </select>
-                <span id="no-sub-tracks"></span>
+            <!-- Bottom control bar — matches Image 2 layout exactly -->
+            <div class="ctrl-bar">
+
+                <!-- Rewind 10s -->
+                <button class="ctrl-btn" onclick="skip(-10)" title="Rewind 10s">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+                        <path d="M12 5V2L8 6l4 4V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                        <text x="12" y="14.5" text-anchor="middle" font-size="5.5" font-family="Inter,sans-serif" font-weight="700" fill="white">10</text>
+                    </svg>
+                </button>
+
+                <!-- Play/Pause -->
+                <button class="ctrl-btn" id="playBtn" onclick="togglePlay()" title="Play/Pause" style="font-size:1.1rem;">
+                    <i class="fa fa-play" id="playIcon"></i>
+                </button>
+
+                <!-- Forward 10s -->
+                <button class="ctrl-btn" onclick="skip(10)" title="Forward 10s">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+                        <path d="M12 5V2l4 4-4 4V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/>
+                        <text x="12" y="14.5" text-anchor="middle" font-size="5.5" font-family="Inter,sans-serif" font-weight="700" fill="white">10</text>
+                    </svg>
+                </button>
+
+                <!-- Time -->
+                <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+
+                <div class="spacer"></div>
+
+                <!-- Volume -->
+                <div class="vol-wrap">
+                    <button class="ctrl-btn" id="muteBtn" onclick="toggleMute()" title="Mute" style="font-size:.9rem;">
+                        <i class="fa fa-volume-high" id="volIcon"></i>
+                    </button>
+                    <input class="vol-slider" id="volSlider" type="range" min="0" max="1" step="0.02" value="1" oninput="setVolume(this.value)">
+                </div>
+
+                <!-- Subtitles toggle (shows if subs loaded) -->
+                <button class="ctrl-btn" id="subToggleBtn" onclick="toggleSubtitle()" title="Subtitles" style="display:none;font-size:.85rem;">
+                    <i class="fa fa-closed-captioning"></i>
+                </button>
+
+                <!-- Fullscreen -->
+                <button class="ctrl-btn" onclick="toggleFullscreen()" title="Fullscreen" style="font-size:.9rem;">
+                    <i class="fa fa-expand" id="fsIcon"></i>
+                </button>
+
             </div>
-
-            <div class="ctrl-group">
-                <label>⚡ Playback Speed</label>
-                <select id="speed-sel" onchange="changeSpeed(this.value)">
-                    <option value="0.25">0.25×</option>
-                    <option value="0.5">0.5×</option>
-                    <option value="0.75">0.75×</option>
-                    <option value="1" selected>1× (Normal)</option>
-                    <option value="1.25">1.25×</option>
-                    <option value="1.5">1.5×</option>
-                    <option value="1.75">1.75×</option>
-                    <option value="2">2×</option>
-                </select>
-            </div>
-
-        </div>
-
-        <div class="file-info">
-            <h4>File Name</h4>
-            <p>{{file_name}}</p>
-        </div>
-
-        <!-- ── FIX 2: Correct deep-link schemes for each external player ── -->
-        <div class="player-btns">
-
-            <!-- VLC: vlc:// scheme opens VLC and plays the URL directly -->
-            <a class="player-btn" id="btn-vlc" href="#" onclick="openVLC(); return false;">
-                <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" alt="VLC">
-                Watch in VLC
-            </a>
-
-            <!-- MX Player: uses intent URI on Android; web-fallback on desktop -->
-            <a class="player-btn" id="btn-mx" href="#" onclick="openMX(); return false;">
-                <img src="https://i.postimg.cc/sx4Msv4T/mx.png" alt="MX">
-                Watch in MX Player
-            </a>
-
-            <!-- PLAYit: uses playit:// deep link -->
-            <a class="player-btn" id="btn-playit" href="#" onclick="openPlayit(); return false;">
-                <img src="https://i.postimg.cc/RVGWYJFF/playit.png" alt="PLAYit">
-                Watch in PLAYit
-            </a>
-
-            <!-- KM Player: uses kmplayer:// deep link -->
-            <a class="player-btn" id="btn-km" href="#" onclick="openKM(); return false;">
-                <img src="https://i.postimg.cc/wT9tFQ9Z/km.png" alt="KMPlayer">
-                Watch in KM Player
-            </a>
-
-            <!-- nPlayer: uses nplayer-http:// scheme -->
-            <a class="player-btn" id="btn-nplayer" href="#" onclick="openNPlayer(); return false;">
-                <img src="https://i.postimg.cc/XYJr6NGg/s.png" alt="nPlayer">
-                Watch in nPlayer
-            </a>
-
-            <!-- Download -->
-            <a class="player-btn download-btn" id="btn-dl" href="{{file_url}}" download>
-                <i class="fa fa-download" style="font-size:22px;"></i>
-                Download Video
-            </a>
-
         </div>
     </div>
 
-    <footer>
-        <p>This site only provides a streaming helper. We do not host any content.<br>
-           To generate your own stream/download link use <a href="https://t.me/FilesXstreamerobot">FileXStreamer</a> bot.<br>
-           <a href="https://telegram.me/TGguy_Ownerobot">Report an issue</a>
-        </p>
-        <div class="icons"><a href="https://telegram.me/The_TGguy"><i class="fa-brands fa-telegram"></i></a></div>
-        <p style="margin-top:8px;">Copyright © 2025 All Rights Reserved · Made by <a href="https://telegram.me/The_TGguy">Telegram Guy!!</a></p>
-    </footer>
+    <!-- ── TRACK + SPEED PANEL ── -->
+    <div class="panel" id="trackPanel">
 
-    <!-- ── Plyr (FIX 3: solid, battle-tested HTML5 video player) ── -->
-    <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+        <div class="ctrl-group">
+            <label><i class="fa fa-music"></i> Audio Track</label>
+            <div class="track-loading" id="audioLoading">Detecting tracks…</div>
+            <select id="audioSel" style="display:none" onchange="switchAudio(this.value)"></select>
+            <div class="ctrl-note" id="audioNote"></div>
+        </div>
 
-    <script>
-        // ═══════════════════════════════════════════════════════════
-        // FIX 3: Init Plyr with settings that avoid black-screen bug
-        // The black screen happens when the browser can't determine
-        // video dimensions before play. Setting poster='' and forcing
-        // a preload + explicit size avoids this.
-        // ═══════════════════════════════════════════════════════════
-        const videoEl = document.getElementById('player');
-        const fileUrl  = "{{file_url}}";
-        const fileName = "{{file_name}}";
+        <div class="ctrl-group">
+            <label><i class="fa fa-closed-captioning"></i> Subtitles</label>
+            <div class="track-loading" id="subLoading">Detecting tracks…</div>
+            <select id="subSel" style="display:none" onchange="switchSubtitle(this.value)">
+                <option value="-1">Off</option>
+            </select>
+            <div class="ctrl-note" id="subNote"></div>
+        </div>
 
-        const player = new Plyr('#player', {
-            controls: [
-                'play-large', 'rewind', 'play', 'fast-forward', 'progress',
-                'current-time', 'duration', 'mute', 'volume',
-                'captions', 'settings', 'pip', 'airplay', 'fullscreen'
-            ],
-            settings: ['captions', 'quality', 'speed', 'loop'],
-            speed: { selected: 1, options: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] },
-            // FIX 3: ratio prevents player from collapsing to 0-height before metadata
-            ratio: '16:9',
-            invertTime: false,
-            toggleInvert: false,
+        <div class="ctrl-group">
+            <label><i class="fa fa-gauge-high"></i> Playback Speed</label>
+            <select id="speedSel" onchange="setSpeed(this.value)">
+                <option value="0.25">0.25×</option>
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1" selected>1× — Normal</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="1.75">1.75×</option>
+                <option value="2">2×</option>
+            </select>
+        </div>
+
+    </div>
+
+    <!-- ── FILE INFO ── -->
+    <div class="file-info">
+        <div class="file-icon"><i class="fa fa-file-video"></i></div>
+        <div class="file-meta">
+            <div class="fname">{{file_name}}</div>
+            <div class="fsize">{{file_size}}</div>
+        </div>
+    </div>
+
+    <!-- ── EXTERNAL PLAYERS ── -->
+    <div class="section-label">Open in external player</div>
+    <div class="ext-btns">
+
+        <a class="ext-btn" href="#" onclick="openVLC();return false;">
+            <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" alt="VLC"> VLC
+        </a>
+
+        <a class="ext-btn" href="#" onclick="openMX();return false;">
+            <img src="https://i.postimg.cc/sx4Msv4T/mx.png" alt="MX"> MX Player
+        </a>
+
+        <a class="ext-btn" href="#" onclick="openPlayit();return false;">
+            <img src="https://i.postimg.cc/RVGWYJFF/playit.png" alt="PLAYit"> PLAYit
+        </a>
+
+        <a class="ext-btn" href="#" onclick="openKM();return false;">
+            <img src="https://i.postimg.cc/wT9tFQ9Z/km.png" alt="KMPlayer"> KM Player
+        </a>
+
+        <a class="ext-btn" href="#" onclick="openNPlayer();return false;">
+            <img src="https://i.postimg.cc/XYJr6NGg/s.png" alt="nPlayer"> nPlayer
+        </a>
+
+        <a class="ext-btn dl" href="{{file_url}}" download>
+            <i class="fa fa-download"></i> Download
+        </a>
+
+    </div>
+
+</div><!-- .page -->
+
+<footer>
+    Stream/download links via <a href="https://t.me/FilesXstreamerobot">FileXStreamer</a> bot ·
+    <a href="https://telegram.me/TGguy_Ownerobot">Report issue</a><br>
+    <span style="margin-top:6px;display:block;">© 2025 · Made by <a href="https://t.me/The_TGguy">Telegram Guy!!</a></span>
+</footer>
+
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════════════════════════
+     SCRIPT
+     ════════════════════════════════════════════════════════ -->
+<script>
+// ── Constants injected by Jinja ──────────────────────────────────────────────
+const FILE_URL  = "{{file_url}}";
+const FILE_NAME = "{{file_name}}";
+
+// Extract msg id and hash from the stream URL
+// URL pattern: https://host/{id}/{filename}?hash={hash}
+const _urlObj   = new URL(FILE_URL);
+const _pathParts = _urlObj.pathname.split("/").filter(Boolean);
+const MSG_ID    = _pathParts[0];
+const HASH      = _urlObj.searchParams.get("hash") || "";
+const BASE_URL  = _urlObj.origin;  // https://host
+
+// ── DOM refs ─────────────────────────────────────────────────────────────────
+const vid         = document.getElementById("vid");
+const shell       = document.getElementById("shell");
+const centrePlay  = document.getElementById("centrePlay");
+const playIcon    = document.getElementById("playIcon");
+const spinner     = document.getElementById("spinner");
+const progressFill= document.getElementById("progressFill");
+const progressBuf = document.getElementById("progressBuf");
+const progressWrap= document.getElementById("progressWrap");
+const timeDisplay = document.getElementById("timeDisplay");
+const volSlider   = document.getElementById("volSlider");
+const volIcon     = document.getElementById("volIcon");
+const fsIcon      = document.getElementById("fsIcon");
+const trackPanel  = document.getElementById("trackPanel");
+const audioSel    = document.getElementById("audioSel");
+const audioLoading= document.getElementById("audioLoading");
+const audioNote   = document.getElementById("audioNote");
+const subSel      = document.getElementById("subSel");
+const subLoading  = document.getElementById("subLoading");
+const subNote     = document.getElementById("subNote");
+const subToggleBtn= document.getElementById("subToggleBtn");
+
+// ── Init video src ────────────────────────────────────────────────────────────
+vid.src = FILE_URL;
+vid.load();
+
+// ── Playback controls ─────────────────────────────────────────────────────────
+function togglePlay() {
+    if (vid.paused || vid.ended) {
+        vid.play().catch(()=>{});
+    } else {
+        vid.pause();
+    }
+}
+
+function skip(sec) {
+    vid.currentTime = Math.max(0, Math.min(vid.duration || 0, vid.currentTime + sec));
+}
+
+function setVolume(v) {
+    vid.volume = parseFloat(v);
+    vid.muted  = (v == 0);
+    updateVolIcon();
+}
+
+function toggleMute() {
+    vid.muted = !vid.muted;
+    volSlider.value = vid.muted ? 0 : vid.volume;
+    updateVolIcon();
+}
+
+function updateVolIcon() {
+    const v = vid.muted ? 0 : vid.volume;
+    volIcon.className = v === 0 ? "fa fa-volume-xmark"
+                      : v < 0.5 ? "fa fa-volume-low"
+                      :           "fa fa-volume-high";
+}
+
+function setSpeed(v) { vid.playbackRate = parseFloat(v); }
+
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        (shell.requestFullscreen || shell.webkitRequestFullscreen || shell.mozRequestFullScreen).call(shell);
+    } else {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    }
+}
+
+// ── Video event listeners ─────────────────────────────────────────────────────
+vid.addEventListener("play", () => {
+    playIcon.className = "fa fa-pause";
+    centrePlay.classList.add("hidden");
+});
+vid.addEventListener("pause", () => {
+    playIcon.className = "fa fa-play";
+    if (!vid.ended) centrePlay.classList.remove("hidden");
+});
+vid.addEventListener("ended", () => {
+    playIcon.className = "fa fa-play";
+    centrePlay.classList.remove("hidden");
+});
+vid.addEventListener("waiting", () => { spinner.style.display = "block"; });
+vid.addEventListener("playing", () => { spinner.style.display = "none";  });
+vid.addEventListener("canplay", () => { spinner.style.display = "none";  });
+
+vid.addEventListener("timeupdate", () => {
+    if (!vid.duration) return;
+    const pct = (vid.currentTime / vid.duration) * 100;
+    progressFill.style.width = pct + "%";
+    timeDisplay.textContent  = fmt(vid.currentTime) + " / " + fmt(vid.duration);
+});
+
+vid.addEventListener("progress", () => {
+    if (!vid.duration) return;
+    for (let i = 0; i < vid.buffered.length; i++) {
+        if (vid.buffered.start(i) <= vid.currentTime) {
+            progressBuf.style.width = (vid.buffered.end(i) / vid.duration * 100) + "%";
+        }
+    }
+});
+
+vid.addEventListener("loadedmetadata", () => {
+    trackPanel.classList.add("visible");
+    loadTrackInfo();
+});
+
+document.addEventListener("fullscreenchange", () => {
+    fsIcon.className = document.fullscreenElement ? "fa fa-compress" : "fa fa-expand";
+});
+
+// ── Progress bar scrubbing ────────────────────────────────────────────────────
+let scrubbing = false;
+progressWrap.addEventListener("mousedown",  startScrub);
+progressWrap.addEventListener("touchstart", startScrub, {passive:true});
+document.addEventListener("mousemove",  doScrub);
+document.addEventListener("touchmove",  doScrub, {passive:true});
+document.addEventListener("mouseup",    endScrub);
+document.addEventListener("touchend",   endScrub);
+
+function startScrub(e) { scrubbing = true; doScrub(e); }
+function doScrub(e) {
+    if (!scrubbing) return;
+    const rect = progressWrap.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX);
+    const ratio = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    if (vid.duration) vid.currentTime = ratio * vid.duration;
+    progressFill.style.width = (ratio * 100) + "%";
+}
+function endScrub() { scrubbing = false; }
+
+// ── Auto-hide controls on mobile ─────────────────────────────────────────────
+let hideTimer;
+shell.addEventListener("click", () => {
+    shell.classList.add("ctrl-visible");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => shell.classList.remove("ctrl-visible"), 3500);
+});
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+    if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+    if (e.code === "Space")       { e.preventDefault(); togglePlay(); }
+    if (e.code === "ArrowRight")  skip(10);
+    if (e.code === "ArrowLeft")   skip(-10);
+    if (e.code === "ArrowUp")     { vid.volume = Math.min(1, vid.volume + .1); volSlider.value = vid.volume; updateVolIcon(); }
+    if (e.code === "ArrowDown")   { vid.volume = Math.max(0, vid.volume - .1); volSlider.value = vid.volume; updateVolIcon(); }
+    if (e.code === "KeyF")        toggleFullscreen();
+    if (e.code === "KeyM")        toggleMute();
+});
+
+// ── Time formatter ────────────────────────────────────────────────────────────
+function fmt(s) {
+    s = Math.floor(s || 0);
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), ss = s%60;
+    return h ? `${h}:${z(m)}:${z(ss)}` : `${m}:${z(ss)}`;
+}
+function z(n) { return String(n).padStart(2,"0"); }
+
+// ════════════════════════════════════════════════════════════════════════════
+// AUDIO & SUBTITLE TRACK SYSTEM
+//
+// Problem: MKV/MKA files contain multiple audio and subtitle streams that
+// the browser CANNOT switch between natively — the browser decodes only the
+// first audio stream and ignores embedded subtitle formats like ASS/SSA.
+//
+// Solution:
+//   1. On metadata load, call GET /info/{id}?hash= → returns JSON list of
+//      audio tracks and subtitle tracks (detected by ffprobe server-side).
+//   2. Audio switching: we reload the <video> src with a custom
+//      ?audio=N query param that the server can use (if transcoding is
+//      enabled), OR we fall back to the browser's AudioTrackList API.
+//   3. Subtitles: each track is served as WebVTT via GET /sub/{id}/{n}?hash=
+//      The server extracts it on-the-fly with ffmpeg. We create <track>
+//      elements dynamically, one per subtitle stream.
+// ════════════════════════════════════════════════════════════════════════════
+
+let subtitleTracks   = [];   // [{index, label, lang}]
+let activeSubIdx     = -1;   // -1 = off
+let subTrackElements = {};   // index → <track> DOM element
+
+async function loadTrackInfo() {
+    const infoUrl = `${BASE_URL}/info/${MSG_ID}?hash=${HASH}`;
+    try {
+        const res  = await fetch(infoUrl);
+        const data = await res.json();
+
+        buildAudioSelector(data.audio   || []);
+        buildSubSelector(data.subtitles || []);
+    } catch(err) {
+        // /info endpoint not available — fall back to HTMLMediaElement APIs
+        audioLoading.textContent = "Track info unavailable";
+        subLoading.textContent   = "Track info unavailable";
+        fallbackAudioTracks();
+        fallbackSubtitleTracks();
+    }
+}
+
+// ── Audio ────────────────────────────────────────────────────────────────────
+function buildAudioSelector(tracks) {
+    audioLoading.style.display = "none";
+
+    if (tracks.length <= 1) {
+        audioNote.textContent = tracks.length === 0
+            ? "No audio tracks detected"
+            : "Single audio track";
+        // Still show the selector with "Default"
+        audioSel.innerHTML = '<option value="0">Default</option>';
+        audioSel.style.display = "block";
+        return;
+    }
+
+    audioSel.innerHTML = "";
+    tracks.forEach(t => {
+        const o = document.createElement("option");
+        o.value       = t.index;
+        o.textContent = t.label;
+        audioSel.appendChild(o);
+    });
+    audioSel.style.display = "block";
+    audioNote.textContent  = "Note: Audio switching requires page reload for multi-track MKV files";
+}
+
+function switchAudio(idx) {
+    // Save position and switch audio by reloading with ?audio= param
+    // The server currently streams all bytes; for true audio switching
+    // the cleanest cross-browser approach is reload with the track hint.
+    const currentTime = vid.currentTime;
+    const url = new URL(FILE_URL);
+    url.searchParams.set("audio", idx);
+    vid.src = url.toString();
+    vid.load();
+    vid.addEventListener("loadedmetadata", () => { vid.currentTime = currentTime; vid.play(); }, {once:true});
+}
+
+// Fallback: use HTMLMediaElement.audioTracks (Safari/Edge only)
+function fallbackAudioTracks() {
+    audioLoading.style.display = "none";
+    if (vid.audioTracks && vid.audioTracks.length > 1) {
+        audioSel.innerHTML = "";
+        Array.from(vid.audioTracks).forEach((t,i) => {
+            const o = document.createElement("option");
+            o.value       = i;
+            o.textContent = t.label || t.language || `Track ${i+1}`;
+            if (t.enabled) o.selected = true;
+            audioSel.appendChild(o);
         });
+        audioSel.onchange = (e) => {
+            Array.from(vid.audioTracks).forEach((t,i) => { t.enabled = (i === parseInt(e.target.value)); });
+        };
+        audioSel.style.display = "block";
+    } else {
+        audioSel.innerHTML = '<option value="0">Default</option>';
+        audioSel.style.display = "block";
+        audioNote.textContent = "Single audio track";
+    }
+}
 
-        // FIX 3: Once video metadata loads, show controls panel and populate tracks
-        videoEl.addEventListener('loadedmetadata', function () {
-            document.getElementById('controls-panel').style.display = 'flex';
-            populateAudioTracks();
-            populateSubtitleTracks();
+// ── Subtitles ────────────────────────────────────────────────────────────────
+function buildSubSelector(tracks) {
+    subLoading.style.display = "none";
+    subtitleTracks = tracks;
+
+    if (tracks.length === 0) {
+        subNote.textContent = "No subtitles found in this file";
+        subSel.style.display = "block";
+        return;
+    }
+
+    // Add track options
+    tracks.forEach(t => {
+        const o = document.createElement("option");
+        o.value       = t.index;
+        o.textContent = t.label;
+        subSel.appendChild(o);
+    });
+    subSel.style.display  = "block";
+    subToggleBtn.style.display = "flex"; // show CC button in player
+
+    // Pre-create <track> elements for each subtitle stream
+    tracks.forEach(t => {
+        const trackEl        = document.createElement("track");
+        trackEl.kind         = "subtitles";
+        trackEl.label        = t.label;
+        trackEl.srclang      = t.lang || "und";
+        trackEl.src          = `${BASE_URL}/sub/${MSG_ID}/${t.index}?hash=${HASH}`;
+        trackEl.mode         = "hidden";
+        vid.appendChild(trackEl);
+        subTrackElements[t.index] = trackEl;
+    });
+
+    subNote.textContent = `${tracks.length} subtitle track${tracks.length>1?"s":""} available`;
+}
+
+function switchSubtitle(idx) {
+    activeSubIdx = parseInt(idx);
+
+    // Hide all first
+    Array.from(vid.textTracks).forEach(t => { t.mode = "hidden"; });
+
+    if (activeSubIdx >= 0 && subTrackElements[activeSubIdx]) {
+        subTrackElements[activeSubIdx].mode = "showing";
+        // Also set via textTracks if browser has loaded it
+        const tt = vid.textTracks[activeSubIdx];
+        if (tt) tt.mode = "showing";
+    }
+}
+
+let subVisible = false;
+function toggleSubtitle() {
+    subVisible = !subVisible;
+    if (subVisible && subtitleTracks.length > 0) {
+        const firstIdx = subtitleTracks[0].index;
+        subSel.value = firstIdx;
+        switchSubtitle(firstIdx);
+    } else {
+        subSel.value = -1;
+        switchSubtitle(-1);
+    }
+}
+
+// Fallback: use HTMLMediaElement.textTracks (for WebVTT in MP4)
+function fallbackSubtitleTracks() {
+    subLoading.style.display = "none";
+    const tracks = Array.from(vid.textTracks).filter(t => t.kind==="subtitles"||t.kind==="captions");
+    if (tracks.length > 0) {
+        tracks.forEach((t,i) => {
+            const o = document.createElement("option");
+            o.value       = i;
+            o.textContent = t.label || t.language || `Track ${i+1}`;
+            subSel.appendChild(o);
         });
+        subSel.onchange = e => {
+            const idx = parseInt(e.target.value);
+            tracks.forEach((t,i) => { t.mode = (i===idx) ? "showing" : "hidden"; });
+        };
+        subSel.style.display = "block";
+        subToggleBtn.style.display = "flex";
+    } else {
+        subNote.textContent  = "No subtitles in this file";
+        subSel.style.display = "block";
+    }
+}
 
-        // ═══════════════════════════════════════════════════════════
-        // FIX 5: Audio track switching
-        // ═══════════════════════════════════════════════════════════
-        function populateAudioTracks() {
-            const sel = document.getElementById('audio-track-sel');
-            const noMsg = document.getElementById('no-audio-tracks');
-            sel.innerHTML = '';
+// ════════════════════════════════════════════════════════════════════════════
+// EXTERNAL PLAYER DEEP LINKS
+// ════════════════════════════════════════════════════════════════════════════
 
-            // AudioTrackList is supported in Chrome/Edge/Safari for MP4
-            if (videoEl.audioTracks && videoEl.audioTracks.length > 0) {
-                Array.from(videoEl.audioTracks).forEach((track, i) => {
-                    const opt = document.createElement('option');
-                    opt.value = i;
-                    opt.textContent = track.label || track.language || `Track ${i + 1}`;
-                    if (track.enabled) opt.selected = true;
-                    sel.appendChild(opt);
-                });
-                noMsg.textContent = '';
-            } else {
-                const opt = document.createElement('option');
-                opt.value = 0;
-                opt.textContent = 'Default';
-                sel.appendChild(opt);
-                noMsg.textContent = 'Single audio track detected';
-            }
-        }
+const encName = encodeURIComponent(FILE_NAME);
+const isAndroid = /android/i.test(navigator.userAgent);
 
-        function changeAudioTrack(idx) {
-            if (!videoEl.audioTracks || videoEl.audioTracks.length === 0) return;
-            Array.from(videoEl.audioTracks).forEach((track, i) => {
-                track.enabled = (i === parseInt(idx));
-            });
-        }
+function openVLC() {
+    window.location.href = "vlc://" + FILE_URL;
+    setTimeout(() => { if (document.hasFocus()) copyUrl("VLC"); }, 1500);
+}
 
-        // ═══════════════════════════════════════════════════════════
-        // FIX 5: Subtitle / caption track switching
-        // ═══════════════════════════════════════════════════════════
-        function populateSubtitleTracks() {
-            const sel = document.getElementById('subtitle-sel');
-            const noMsg = document.getElementById('no-sub-tracks');
-            // keep the "Off" option
-            sel.innerHTML = '<option value="-1">Off</option>';
+function openMX() {
+    if (isAndroid) {
+        window.location.href = `intent:${FILE_URL}#Intent;package=com.mxtech.videoplayer.ad;S.title=${encName};end`;
+        setTimeout(() => {
+            if (document.hasFocus())
+                window.location.href = `intent:${FILE_URL}#Intent;package=com.mxtech.videoplayer.pro;S.title=${encName};end`;
+        }, 1200);
+    } else {
+        copyUrl("MX Player");
+    }
+}
 
-            const tracks = Array.from(videoEl.textTracks || []).filter(
-                t => t.kind === 'subtitles' || t.kind === 'captions'
-            );
+function openPlayit() {
+    if (isAndroid) {
+        window.location.href = `intent:${FILE_URL}#Intent;package=com.playit.videoplayer;S.title=${encName};end`;
+        setTimeout(() => { if (document.hasFocus()) copyUrl("PLAYit"); }, 1500);
+    } else { copyUrl("PLAYit"); }
+}
 
-            if (tracks.length > 0) {
-                tracks.forEach((track, i) => {
-                    const opt = document.createElement('option');
-                    opt.value = i;
-                    opt.textContent = track.label || track.language || `Track ${i + 1}`;
-                    sel.appendChild(opt);
-                });
-                noMsg.textContent = '';
-            } else {
-                noMsg.textContent = 'No subtitle tracks found in this file';
-            }
-        }
+function openKM() {
+    if (isAndroid) {
+        window.location.href = `intent:${FILE_URL}#Intent;package=com.kmplayer;S.title=${encName};end`;
+        setTimeout(() => { if (document.hasFocus()) copyUrl("KM Player"); }, 1500);
+    } else {
+        window.location.href = `kmp://${FILE_URL}`;
+        setTimeout(() => { if (document.hasFocus()) copyUrl("KM Player"); }, 1500);
+    }
+}
 
-        function changeSubtitle(idx) {
-            const tracks = Array.from(videoEl.textTracks || []).filter(
-                t => t.kind === 'subtitles' || t.kind === 'captions'
-            );
-            tracks.forEach((track, i) => {
-                track.mode = (i === parseInt(idx)) ? 'showing' : 'hidden';
-            });
-        }
+function openNPlayer() {
+    const scheme = FILE_URL.startsWith("https") ? "nplayer-https" : "nplayer-http";
+    window.location.href = FILE_URL.replace(/^https?/, scheme);
+    setTimeout(() => { if (document.hasFocus()) copyUrl("nPlayer"); }, 1500);
+}
 
-        // ═══════════════════════════════════════════════════════════
-        // FIX 5: Playback speed
-        // ═══════════════════════════════════════════════════════════
-        function changeSpeed(val) {
-            videoEl.playbackRate = parseFloat(val);
-            player.speed = parseFloat(val);
-        }
+// ── Clipboard helper ──────────────────────────────────────────────────────────
+function copyUrl(playerName) {
+    const done = () => toast(`URL copied! Paste it into ${playerName}.`);
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(FILE_URL).then(done).catch(() => legacyCopy(playerName));
+    } else { legacyCopy(playerName); }
+}
+function legacyCopy(playerName) {
+    const ta = Object.assign(document.createElement("textarea"), {
+        value: FILE_URL, style: "position:fixed;opacity:0"
+    });
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast(`URL copied! Paste into ${playerName}.`); }
+    catch { toast(`Open ${playerName} and paste:\n${FILE_URL}`); }
+    document.body.removeChild(ta);
+}
 
-        // ═══════════════════════════════════════════════════════════
-        // FIX 2: External player deep-links
-        //
-        // The original buttons called JS functions that were never
-        // defined (they relied on a missing StreamJs.js). Below are
-        // the correct intent/scheme URLs for each player.
-        //
-        // On Android:  intent:// and custom schemes open the app.
-        // On desktop:  VLC and KMPlayer support vlc:// and kmp:// 
-        //              We fall back to a copy-URL prompt on desktop.
-        // ═══════════════════════════════════════════════════════════
-
-        const encodedUrl = encodeURIComponent(fileUrl);
-        const encodedName = encodeURIComponent(fileName);
-
-        function isAndroid() {
-            return /android/i.test(navigator.userAgent);
-        }
-
-        // ── VLC ──────────────────────────────────────────────────
-        // vlc:// scheme works on both Android VLC and desktop VLC
-        function openVLC() {
-            const vlcUrl = 'vlc://' + fileUrl;
-            window.location.href = vlcUrl;
-            // Fallback: if vlc:// doesn't trigger anything after 1.5s, show copy prompt
-            setTimeout(() => {
-                if (document.hasFocus()) {
-                    copyToClipboard(fileUrl, 'VLC');
-                }
-            }, 1500);
-        }
-
-        // ── MX Player ────────────────────────────────────────────
-        // Android intent URL — opens MX Player directly with the stream URL
-        function openMX() {
-            if (isAndroid()) {
-                // intent scheme that Android Chrome/WebView can handle
-                const intent = `intent:${fileUrl}#Intent;` +
-                    `package=com.mxtech.videoplayer.ad;` +
-                    `S.title=${encodedName};` +
-                    `end`;
-                window.location.href = intent;
-                setTimeout(() => {
-                    if (document.hasFocus()) {
-                        // Fallback: try free version package
-                        window.location.href = `intent:${fileUrl}#Intent;` +
-                            `package=com.mxtech.videoplayer.pro;` +
-                            `S.title=${encodedName};end`;
-                    }
-                }, 1500);
-            } else {
-                // Desktop: MX Player Web
-                window.open(`https://play.google.com/store/apps/details?id=com.mxtech.videoplayer.ad`, '_blank');
-                copyToClipboard(fileUrl, 'MX Player');
-            }
-        }
-
-        // ── PLAYit ───────────────────────────────────────────────
-        function openPlayit() {
-            if (isAndroid()) {
-                const intent = `intent:${fileUrl}#Intent;` +
-                    `package=com.playit.videoplayer;` +
-                    `S.title=${encodedName};end`;
-                window.location.href = intent;
-                setTimeout(() => {
-                    if (document.hasFocus()) copyToClipboard(fileUrl, 'PLAYit');
-                }, 1500);
-            } else {
-                window.open('https://play.google.com/store/apps/details?id=com.playit.videoplayer', '_blank');
-                copyToClipboard(fileUrl, 'PLAYit');
-            }
-        }
-
-        // ── KM Player ────────────────────────────────────────────
-        function openKM() {
-            if (isAndroid()) {
-                const intent = `intent:${fileUrl}#Intent;` +
-                    `package=com.kmplayer;` +
-                    `S.title=${encodedName};end`;
-                window.location.href = intent;
-                setTimeout(() => {
-                    if (document.hasFocus()) copyToClipboard(fileUrl, 'KM Player');
-                }, 1500);
-            } else {
-                // Desktop KMPlayer supports kmp:// on Windows
-                window.location.href = `kmp://${fileUrl}`;
-                setTimeout(() => {
-                    if (document.hasFocus()) copyToClipboard(fileUrl, 'KM Player');
-                }, 1500);
-            }
-        }
-
-        // ── nPlayer ──────────────────────────────────────────────
-        function openNPlayer() {
-            const scheme = fileUrl.startsWith('https') ?
-                'nplayer-https' : 'nplayer-http';
-            const nUrl = fileUrl.replace(/^https?/, scheme);
-            window.location.href = nUrl;
-            setTimeout(() => {
-                if (document.hasFocus()) copyToClipboard(fileUrl, 'nPlayer');
-            }, 1500);
-        }
-
-        // ── Helper: copy URL with a toast notification ────────────
-        function copyToClipboard(url, playerName) {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(url).then(() => {
-                    showToast(`App not found or couldn't open. URL copied! Paste it into ${playerName}.`);
-                }).catch(() => fallbackCopy(url, playerName));
-            } else {
-                fallbackCopy(url, playerName);
-            }
-        }
-
-        function fallbackCopy(url, playerName) {
-            const ta = document.createElement('textarea');
-            ta.value = url;
-            ta.style.cssText = 'position:fixed;opacity:0';
-            document.body.appendChild(ta);
-            ta.select();
-            try {
-                document.execCommand('copy');
-                showToast(`URL copied! Paste it into ${playerName}.`);
-            } catch(e) {
-                showToast(`Open ${playerName} manually and paste this URL:\n${url}`);
-            }
-            document.body.removeChild(ta);
-        }
-
-        function showToast(msg) {
-            let t = document.getElementById('toast');
-            if (!t) {
-                t = document.createElement('div');
-                t.id = 'toast';
-                t.style.cssText = `
-                    position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
-                    background:#1e1e3a;color:#eee;padding:12px 22px;border-radius:10px;
-                    font-size:0.85rem;z-index:9999;border:1px solid #7c3aed;
-                    max-width:90vw;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);
-                `;
-                document.body.appendChild(t);
-            }
-            t.textContent = msg;
-            t.style.display = 'block';
-            clearTimeout(t._timeout);
-            t._timeout = setTimeout(() => { t.style.display = 'none'; }, 4000);
-        }
-    </script>
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let _toastTimer;
+function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg; el.style.display = "block";
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { el.style.display = "none"; }, 4000);
+}
+</script>
 </body>
 </html>
