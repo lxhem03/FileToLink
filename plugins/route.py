@@ -2,7 +2,7 @@
 # Subscribe YouTube Channel For Amazing Bot @Tech_VJ
 # Ask Doubt on telegram @KingVJ01
 
-import re, math, logging, secrets, mimetypes, time, asyncio
+import re, math, logging, secrets, mimetypes, time, asyncio, subprocess, os, tempfile
 from info import *
 from aiohttp import web
 from aiohttp.http_exceptions import BadStatusLine
@@ -41,6 +41,158 @@ async def watch_handler(request: web.Request):
         logging.critical(e.with_traceback(None))
         raise web.HTTPInternalServerError(text=str(e))
 
+
+# ── Subtitle extraction endpoint ──────────────────────────────────────────────
+# GET /sub/{msg_id}/{track_index}?hash=XXXX
+# Streams a single subtitle track as WebVTT, extracted on-the-fly with ffmpeg.
+# This is the ONLY reliable way to expose MKV-embedded subtitles to browsers.
+@routes.get(r"/sub/{id:\d+}/{track:\d+}", allow_head=True)
+async def subtitle_handler(request: web.Request):
+    try:
+        id          = int(request.match_info["id"])
+        track_index = int(request.match_info["track"])
+        secure_hash = request.rel_url.query.get("hash", "")
+
+        # Validate hash
+        index = min(work_loads, key=work_loads.get)
+        faster_client = multi_clients[index]
+        if faster_client not in class_cache:
+            class_cache[faster_client] = ByteStreamer(faster_client)
+        tg_connect = class_cache[faster_client]
+        file_id = await tg_connect.get_file_properties(id)
+
+        if file_id.unique_id[:6] != secure_hash:
+            raise web.HTTPForbidden(text="Invalid hash")
+
+        # Build the stream URL for this file (same URL the player uses)
+        from urllib.parse import quote_plus
+        file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
+
+        # ffmpeg: read from HTTP, extract subtitle track track_index as WebVTT
+        cmd = [
+            "ffmpeg", "-v", "quiet",
+            "-i", file_url,
+            "-map", f"0:s:{track_index}",
+            "-f", "webvtt",
+            "pipe:1"
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+
+        if proc.returncode != 0 or not stdout:
+            logging.warning(f"ffmpeg subtitle extract failed for id={id} track={track_index}: {stderr.decode()[:200]}")
+            raise web.HTTPNotFound(text="Subtitle track not found or ffmpeg not available")
+
+        return web.Response(
+            body=stdout,
+            content_type="text/vtt",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "public, max-age=3600",
+            }
+        )
+    except (web.HTTPForbidden, web.HTTPNotFound):
+        raise
+    except asyncio.TimeoutError:
+        raise web.HTTPGatewayTimeout(text="Subtitle extraction timed out")
+    except Exception as e:
+        logging.error(f"Subtitle handler error: {e}")
+        raise web.HTTPInternalServerError(text=str(e))
+
+
+# ── Media info endpoint ───────────────────────────────────────────────────────
+# GET /info/{msg_id}?hash=XXXX
+# Returns JSON with audio track list and subtitle track list, probed via ffprobe.
+# The watch page fetches this on load to populate the track selectors.
+@routes.get(r"/info/{id:\d+}", allow_head=True)
+async def info_handler(request: web.Request):
+    import json
+    try:
+        id          = int(request.match_info["id"])
+        secure_hash = request.rel_url.query.get("hash", "")
+
+        index = min(work_loads, key=work_loads.get)
+        faster_client = multi_clients[index]
+        if faster_client not in class_cache:
+            class_cache[faster_client] = ByteStreamer(faster_client)
+        tg_connect = class_cache[faster_client]
+        file_id = await tg_connect.get_file_properties(id)
+
+        if file_id.unique_id[:6] != secure_hash:
+            raise web.HTTPForbidden(text="Invalid hash")
+
+        from urllib.parse import quote_plus
+        file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
+
+        # ffprobe: extract stream metadata as JSON
+        cmd = [
+            "ffprobe", "-v", "quiet",
+            "-print_format", "json",
+            "-show_streams",
+            file_url
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+        except asyncio.TimeoutError:
+            return web.json_response({"audio": [], "subtitles": [], "error": "probe timeout"})
+
+        audio_tracks = []
+        subtitle_tracks = []
+
+        if stdout:
+            try:
+                probe = json.loads(stdout)
+                audio_idx = 0
+                sub_idx   = 0
+                for stream in probe.get("streams", []):
+                    codec_type = stream.get("codec_type", "")
+                    tags = stream.get("tags", {})
+                    lang  = tags.get("language", tags.get("LANGUAGE", ""))
+                    title = tags.get("title",    tags.get("TITLE", ""))
+                    label = title or lang or ""
+
+                    if codec_type == "audio":
+                        audio_tracks.append({
+                            "index": audio_idx,
+                            "label": label or f"Audio {audio_idx + 1}",
+                            "lang":  lang,
+                        })
+                        audio_idx += 1
+                    elif codec_type == "subtitle":
+                        codec = stream.get("codec_name", "")
+                        # Only expose subtitle codecs ffmpeg can convert to WebVTT
+                        if codec in ("subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "hdmv_pgs_subtitle"):
+                            subtitle_tracks.append({
+                                "index": sub_idx,
+                                "label": label or f"Subtitle {sub_idx + 1}",
+                                "lang":  lang,
+                                "codec": codec,
+                            })
+                        sub_idx += 1
+            except Exception as parse_err:
+                logging.warning(f"ffprobe parse error: {parse_err}")
+
+        return web.json_response(
+            {"audio": audio_tracks, "subtitles": subtitle_tracks},
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
+
+    except web.HTTPForbidden:
+        raise
+    except Exception as e:
+        logging.error(f"Info handler error: {e}")
+        return web.json_response({"audio": [], "subtitles": [], "error": str(e)})
+
+
 @routes.get(r"/{path:\S+}", allow_head=True)
 async def download_handler(request: web.Request):
     try:
@@ -65,39 +217,28 @@ async def download_handler(request: web.Request):
 
 class_cache = {}
 
-# FIX 4: Lock per message-id so concurrent range requests for the SAME file
-# don't race when populating the ByteStreamer cache. Different files/users
-# are fully independent and run in parallel (aiohttp is async, no thread
-# blocking occurs). The lock only serialises the *first* cache-miss per id.
-_cache_locks: dict[int, asyncio.Lock] = {}
+_cache_locks: dict = {}
 
 async def media_streamer(request: web.Request, id: int, secure_hash: str):
     range_header = request.headers.get("Range", 0)
 
-    # FIX 4: pick the least-loaded client (unchanged logic, works for multi-client)
     index = min(work_loads, key=work_loads.get)
     faster_client = multi_clients[index]
 
     if MULTI_CLIENT:
         logging.info(f"Client {index} is now serving {request.remote}")
 
-    # FIX 4: Build/reuse ByteStreamer without a global blocking lock.
-    # Each client gets its own cached instance; concurrent requests share it.
     if faster_client not in class_cache:
         class_cache[faster_client] = ByteStreamer(faster_client)
         logging.debug(f"Created new ByteStreamer for client {index}")
     tg_connect = class_cache[faster_client]
 
-    # Per-message-id lock only for the first property fetch (cache miss).
-    # Once cached, subsequent calls skip the lock entirely.
     if id not in tg_connect.cached_file_ids:
         if id not in _cache_locks:
             _cache_locks[id] = asyncio.Lock()
         async with _cache_locks[id]:
-            # Double-check after acquiring lock (another coroutine may have filled it)
             if id not in tg_connect.cached_file_ids:
                 await tg_connect.generate_file_properties(id)
-                logging.debug(f"Cached file properties for message ID {id}")
 
     file_id = tg_connect.cached_file_ids[id]
 
@@ -132,8 +273,6 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
     req_length = until_bytes - from_bytes + 1
     part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
 
-    # FIX 4: increment workload counter; yield_file is an async generator so
-    # it streams data without blocking the event loop for other users.
     work_loads[index] += 1
     try:
         body = tg_connect.yield_file(
@@ -142,7 +281,7 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
 
         mime_type = file_id.mime_type
         file_name = file_id.file_name
-        disposition = "inline"  # FIX 3: use inline so browser plays video, not downloads
+        disposition = "inline"
 
         if mime_type:
             if not file_name:
@@ -157,7 +296,6 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
                 mime_type = "application/octet-stream"
                 file_name = f"{secrets.token_hex(2)}.unknown"
 
-        # FIX 3: Set disposition to inline for video/audio so browsers stream it
         if mime_type and mime_type.split("/")[0] in ("video", "audio"):
             disposition = "inline"
         else:
@@ -175,5 +313,4 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
             },
         )
     finally:
-        # FIX 4: Always decrement workload so the load balancer stays accurate
         work_loads[index] = max(0, work_loads[index] - 1)
