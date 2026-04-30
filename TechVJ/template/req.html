@@ -1,368 +1,523 @@
-<!-- this code is written by @biisal tg:biisal-files modified by TechifyBots -->
-
-<!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.  -->
-
-
-
-
-
+<!-- Streaming page - patched by Nectar -->
 <!DOCTYPE html>
-
 <html lang="en">
-
-
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>{{file_name}}</title>
-
-    <link rel="stylesheet" href="https://unpkg.com/sheryjs/dist/Shery.css" />
-
-    <link rel="stylesheet" href="https://biisal.github.io/Resources/StreamCSS.css">
-
-    <link rel="stylesheet" href="https://biisal.github.io/Resources/playerCss.css">
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
-
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
     <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@500;700&display=swap" rel="stylesheet">
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
-
         integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA=="
-
         crossorigin="anonymous" referrerpolicy="no-referrer" />
-
+    <!-- FIX 3: Use Plyr CSS for a reliable, well-maintained player with black-screen fix -->
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Josefin Sans', sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 32px;
+            background: rgba(20,20,20,0.95);
+            border-bottom: 1px solid #333;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        nav h3 { font-size: 1.3rem; color: #7c3aed; letter-spacing: 1px; }
+        nav a { color: #aaa; text-decoration: none; margin-left: 18px; font-size: 0.85rem; }
+        nav a:hover { color: #fff; }
 
+        .main-wrap {
+            max-width: 960px;
+            margin: 36px auto;
+            padding: 0 16px;
+        }
 
+        /* ── FIX 3: Video container with explicit background so black flash doesn't persist ── */
+        .player-box {
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+            position: relative;
+        }
+        /* Force Plyr to fill width and avoid sizing bugs that cause black screen */
+        .player-box video,
+        .player-box .plyr {
+            width: 100% !important;
+            height: auto !important;
+            max-height: 540px;
+            background: #000;
+            display: block;
+        }
+        /* Override Plyr's default poster behavior so it doesn't hide the video */
+        .plyr__poster { background-size: cover; }
 
+        /* ── Controls panel (audio track / subtitle / speed) ── */
+        .controls-panel {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 18px 22px;
+            margin-top: 18px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            align-items: flex-end;
+        }
+        .ctrl-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 160px; }
+        .ctrl-group label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+        .ctrl-group select {
+            background: #252540;
+            color: #eee;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-family: 'Josefin Sans', sans-serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+            outline: none;
+        }
+        .ctrl-group select:hover { border-color: #7c3aed; }
+        #no-audio-tracks, #no-sub-tracks {
+            color: #666; font-size: 0.8rem; padding: 8px 0;
+        }
+
+        .file-info {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 16px 22px;
+            margin-top: 16px;
+        }
+        .file-info h4 { color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+        .file-info p { color: #ddd; font-size: 0.95rem; word-break: break-all; }
+
+        /* ── FIX 2: External player buttons with correct deep-link schemes ── */
+        .player-btns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 18px;
+        }
+        .player-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #1e1e3a;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 10px 16px;
+            cursor: pointer;
+            color: #ddd;
+            font-family: 'Josefin Sans', sans-serif;
+            font-size: 0.85rem;
+            text-decoration: none;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .player-btn:hover { background: #2d2d5a; border-color: #7c3aed; color: #fff; }
+        .player-btn img { height: 26px; width: 26px; object-fit: contain; }
+        .download-btn {
+            background: #1a3a1a;
+            border-color: #2d7a2d;
+        }
+        .download-btn:hover { background: #244d24; border-color: #3da33d; }
+
+        footer {
+            text-align: center;
+            padding: 32px 16px;
+            color: #555;
+            font-size: 0.8rem;
+            border-top: 1px solid #222;
+            margin-top: 48px;
+        }
+        footer a { color: #7c3aed; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        footer .icons { margin: 10px 0; font-size: 1.2rem; }
+    </style>
 </head>
-
-
-
 <body>
-
     <nav>
+        <h3>Telegram Guy!!</h3>
+        <div>
+            <a href="https://t.me/The_TGguy">Updates</a>
+            <a href="https://telegram.me/TGguy_Ownerobot">Support</a>
+        </div>
+    </nav>
 
-        <div class="nleft">
+    <div class="main-wrap">
 
-            <a href="https://telegram.me/The_TGguy">
+        <!-- ── FIX 3: video element without autoplay; Plyr handles everything ── -->
+        <div class="player-box">
+            <video id="player"
+                   playsinline
+                   controls
+                   crossorigin="anonymous"
+                   preload="metadata">
+                <source src="{{file_url}}" type="video/mp4">
+                <!-- FIX 3: also serve without type so browser picks codec -->
+                <source src="{{file_url}}">
+            </video>
+        </div>
 
-                <!-- if u are trying to change the header name please remove the title text from bottom line  -->
+        <!-- ── FIX 5: Audio track / Subtitle / Speed controls ── -->
+        <div class="controls-panel" id="controls-panel" style="display:none;">
 
-                <h3 id="heading" style="z-index: 100;" class="magnet">Telegram Guy!!</h3>
+            <div class="ctrl-group" id="audio-ctrl-wrap">
+                <label>🔊 Audio Track</label>
+                <select id="audio-track-sel" onchange="changeAudioTrack(this.value)">
+                    <option value="">Loading...</option>
+                </select>
+                <span id="no-audio-tracks"></span>
+            </div>
 
+            <div class="ctrl-group" id="sub-ctrl-wrap">
+                <label>💬 Subtitles</label>
+                <select id="subtitle-sel" onchange="changeSubtitle(this.value)">
+                    <option value="-1">Off</option>
+                </select>
+                <span id="no-sub-tracks"></span>
+            </div>
+
+            <div class="ctrl-group">
+                <label>⚡ Playback Speed</label>
+                <select id="speed-sel" onchange="changeSpeed(this.value)">
+                    <option value="0.25">0.25×</option>
+                    <option value="0.5">0.5×</option>
+                    <option value="0.75">0.75×</option>
+                    <option value="1" selected>1× (Normal)</option>
+                    <option value="1.25">1.25×</option>
+                    <option value="1.5">1.5×</option>
+                    <option value="1.75">1.75×</option>
+                    <option value="2">2×</option>
+                </select>
+            </div>
+
+        </div>
+
+        <div class="file-info">
+            <h4>File Name</h4>
+            <p>{{file_name}}</p>
+        </div>
+
+        <!-- ── FIX 2: Correct deep-link schemes for each external player ── -->
+        <div class="player-btns">
+
+            <!-- VLC: vlc:// scheme opens VLC and plays the URL directly -->
+            <a class="player-btn" id="btn-vlc" href="#" onclick="openVLC(); return false;">
+                <img src="https://i.postimg.cc/15TQ4y7B/vlc.png" alt="VLC">
+                Watch in VLC
+            </a>
+
+            <!-- MX Player: uses intent URI on Android; web-fallback on desktop -->
+            <a class="player-btn" id="btn-mx" href="#" onclick="openMX(); return false;">
+                <img src="https://i.postimg.cc/sx4Msv4T/mx.png" alt="MX">
+                Watch in MX Player
+            </a>
+
+            <!-- PLAYit: uses playit:// deep link -->
+            <a class="player-btn" id="btn-playit" href="#" onclick="openPlayit(); return false;">
+                <img src="https://i.postimg.cc/RVGWYJFF/playit.png" alt="PLAYit">
+                Watch in PLAYit
+            </a>
+
+            <!-- KM Player: uses kmplayer:// deep link -->
+            <a class="player-btn" id="btn-km" href="#" onclick="openKM(); return false;">
+                <img src="https://i.postimg.cc/wT9tFQ9Z/km.png" alt="KMPlayer">
+                Watch in KM Player
+            </a>
+
+            <!-- nPlayer: uses nplayer-http:// scheme -->
+            <a class="player-btn" id="btn-nplayer" href="#" onclick="openNPlayer(); return false;">
+                <img src="https://i.postimg.cc/XYJr6NGg/s.png" alt="nPlayer">
+                Watch in nPlayer
+            </a>
+
+            <!-- Download -->
+            <a class="player-btn download-btn" id="btn-dl" href="{{file_url}}" download>
+                <i class="fa fa-download" style="font-size:22px;"></i>
+                Download Video
             </a>
 
         </div>
-
-        <div class="nryt">
-
-            <a class="home-btn magnet" href="#main" onclick="toggleWidthnav(this)">HOME</a>
-
-
-
-            <a href="#sec1" class="about-btn magnet" onclick="toggleWidthnav(this)">ABOUT</a>
-
-        </div>
-
-    </nav>
-
-    <center>
-
-        <div class="about-nav">
-
-            <a href="#sec1" class="wlcm magnet" onclick="toggleWidth(this)">WELCOME</a>
-
-            <a href="#sec2" class="abt-chnl magnet" onclick="toggleWidth(this)">CHANNELS</a>
-
-            <a href="#sec3" class="magnet bot-btn" onclick="toggleWidth(this) , bot_btn_clicked()">BOTS</a>
-
-            <a href="#sec4" class="magnet contact-btn" onclick="toggleWidth(this)">SUPPORT</a>
-
-        </div>
-
-    </center>
-
-    <!-- this code is written by @biisal tg:biisal-files & modified by TechifyBots -->
-
-    <!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
-
-
-
-    <div class="outer">
-
-        <div class="inner">
-
-            <div class="main" id="main">
-
-                <video id="player" class="player" src="{{file_url}}" type="video/mp4" playsinline controls
-
-                    width="100%"></video>
-
-                <div class="player"></div>
-
-                <div class="file-name">
-
-                    <h4>File name : </h4>
-
-                    <br>
-
-                    <p id="myDiv">{{file_name}}</p>
-
-                </div>
-
-                <div class="downloadBtn">
-
-                    <button class="magnet" onclick="vlc_player()"><img src="https://i.postimg.cc/15TQ4y7B/vlc.png"
-
-                            alt="">watch in VLC PLAYER</button>
-
-                    <button class="magnet" onclick="mx_player()"><img src="https://i.postimg.cc/sx4Msv4T/mx.png"
-
-                            alt="">watch in MX PLAYER</button>
-
-                    <button class="magnet" onclick="playit_player()"><img src="https://i.postimg.cc/RVGWYJFF/playit.png"
-
-                            alt="">watch in PLAYit
-
-                        PLAYER</button>
-
-                    <button class="magnet" onclick="km_player()"><img src="https://i.postimg.cc/wT9tFQ9Z/km.png"
-
-                            alt="">watch in KM PLAYER</button>
-
-                    <button class="magnet" onclick="s_player()"><img src="https://i.postimg.cc/XYJr6NGg/s.png"
-
-                            alt="">watch in S PLAYER</button>
-
-                    <button class="magnet" onclick="hd_player()"><img src="https://i.postimg.cc/rFT43LNh/hd.png"
-
-                            alt="">watch in HD
-
-                        PLAYER(4K)</button>
-
-                    <button class="magnet" onclick="bisalDownload()"><img style="height: 35px;"
-
-                            src="https://i.postimg.cc/Zncc9YLq/Pngtree-download-icon-3581467.png" alt="">download video
-
-                    </button>
-
-                </div>
-
-
-
-            </div>
-
-            <div class="abt">
-
-                <div class="about">
-
-                    <div class="about-dets">
-
-                        <div class="abt-sec" id="sec1" style="padding: 160px 30px;">
-
-                            <h1 style="text-align: center;">WELCOME TO OUR <Span>STREAMING</Span> PAGE</h1>
-
-                            <p style="text-align: center; line-height: 2;word-spacing: 2px;  letter-spacing: 0.8px;">
-
-                                We're
-
-                                thrilled to have <span>you</span> here.
-
-                                Get ready for an
-
-                                amazing <span>experience</span>
-
-                                filled with <span>entertainment</span>, <span>fun</span>, and <span>surprises</span>.
-
-                                Grab
-
-                                your snacks, sit back, and <span>enjoy</span> the show!
-
-                            </p>
-
-                        </div>
-
-                        <div class="abt-sec" id="sec2">
-
-                            <h1><span>Join</span> Our channels</h1>
-
-                            <div class="links chnl-link">
-
-                                <a class="magnet" href="https://t.me/The_TGguy"><button>Main Channel</button></a>
-
-                                <a class="magnet" href="https://t.me/Animes_Guy"><button>Animes Channel</button></a>
-
-				<a class="magnet" href="https://t.me/Ongoing_AnimeGuy"><button>Ongoing Animes</button></a>
-
-                                <a class="magnet" href="https://t.me/Drama_Guy"><button>Dramas Channel</button></a>
-
-                                <a class="magnet" href="https://t.me/TGguy_Ownerobot"><button>Owner</button></a>
-
-				
-                            </div>
-
-                        </div>
-
-                        <div class="abt-sec" id="sec3">
-
-                            <h1>OUR ALL <span>BOTS</span> LIST</h1>
-
-                            <div class="links bot-link">
-
-				<a class="magnet" href="https://t.me/The_TGguy/25"><button>Check it out!!</button></a>
-
-                            </div>
-
-                        </div>
-
-                        <div class="abt-sec" id="sec4">
-
-                            <!-- this code is written by @biisal tg:biisal-files & modified by TechifyBots -->
-
-                            <!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
-
-
-
-                            <p style="text-align: center;">we can talk for your support and you can also report your problem</p>
-
-                            <div class="links contact">
-
-                                <a href="https://telegram.me/TGguy_Ownerobot"><button>CONTACT</button></a>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>
-
-        <footer>
-
-            <div class="mid">
-
-                <h1 class="mid-text">VISIT <a href="#sec3" onclick="bot_btn_clicked()"><span>OUR BOTS LIST</span></a>
-
-                    FOR
-
-                    MORE
-
-                    INFO</h1>
-
-            </div>
-
-
-
-            <div class="last-text">
-
-                <p style="font-weight: 500;">
-
-                    Hello there, this site is for public use, so we don't own any of the content shared here. The rights are given to the original owner of the content. Create your own stream or download link using <a href="https://t.me/FilesXstreamerobot">FileXStreamer</a> bot 
-
-		    <br/> <br/>
-
-		    This website only provides a service that helps you to play your videos online without downloading. It does not offer storage or dissemination functions. You can report videos that contain issues such as copyright infringement, explicit content, violence, etc with the link. <a href="https://telegram.me/TGguy_Ownerobot"><b><span>Report</span></b></a>
-
-                    <br/> <br/>
-
-		   <u>𝐍𝐨𝐭𝐞</u> : 𝖨𝖿 𝗒𝗈𝗎 𝖿𝗈𝗎𝗇𝖽 𝖺𝗇𝗒 𝖻𝗋𝗈𝗄𝖾𝗇 𝗅𝗂𝗇𝗄 𝗍𝗁𝖾𝗇 𝗉𝗅𝖾𝖺𝗌𝖾 𝗋𝖾𝗉𝗈𝗋𝗍 𝗂𝗇 𝗆𝗒 <b><a href="https://t.me/+NVEV24yebe80ZDZl"><span>𝗌𝗎𝗉𝗉𝗈𝗋𝗍 𝗀𝗋𝗈𝗎𝗉</span></a></b>
-
-         	</p>
-
-            </div>
-
-
-
-            <center>
-
-                <div class="copyright">
-
-                    <h5 class="text-center">Copyright © 2025 All
-
-                        Rights Reserved.</h5>
-
-                    <div class="icons">
-
-                        <a href="https://telegram.me/The_TGguy"><i class="fa-brands fa-telegram fa-lg"></i></a>
-
-                    </div>
-
-                    <h4 style="font-weight: 700;">This Page Is Made By <a
-
-                            href="https://telegram.me/The_TGguy"><span>Telegram Guy!!</span></a></h4>
-
-		</div>
-
-            </center>
-
-        </footer>
-
-</body>
-
-
-
-
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.155.0/three.min.js"></script>
-
-<script src="https://cdn.jsdelivr.net/gh/automat/controlkit.js@master/bin/controlKit.min.js"></script>
-
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/sheryjs/dist/Shery.js"></script>
-
-<script>
-
-    document.addEventListener("DOMContentLoaded", function () {
-
-        const uncopyableElement = document.querySelector(".uncopyable");
-
-
-
-        uncopyableElement.addEventListener("selectstart", function (event) {
-
-            event.preventDefault();
-
+    </div>
+
+    <footer>
+        <p>This site only provides a streaming helper. We do not host any content.<br>
+           To generate your own stream/download link use <a href="https://t.me/FilesXstreamerobot">FileXStreamer</a> bot.<br>
+           <a href="https://telegram.me/TGguy_Ownerobot">Report an issue</a>
+        </p>
+        <div class="icons"><a href="https://telegram.me/The_TGguy"><i class="fa-brands fa-telegram"></i></a></div>
+        <p style="margin-top:8px;">Copyright © 2025 All Rights Reserved · Made by <a href="https://telegram.me/The_TGguy">Telegram Guy!!</a></p>
+    </footer>
+
+    <!-- ── Plyr (FIX 3: solid, battle-tested HTML5 video player) ── -->
+    <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════
+        // FIX 3: Init Plyr with settings that avoid black-screen bug
+        // The black screen happens when the browser can't determine
+        // video dimensions before play. Setting poster='' and forcing
+        // a preload + explicit size avoids this.
+        // ═══════════════════════════════════════════════════════════
+        const videoEl = document.getElementById('player');
+        const fileUrl  = "{{file_url}}";
+        const fileName = "{{file_name}}";
+
+        const player = new Plyr('#player', {
+            controls: [
+                'play-large', 'rewind', 'play', 'fast-forward', 'progress',
+                'current-time', 'duration', 'mute', 'volume',
+                'captions', 'settings', 'pip', 'airplay', 'fullscreen'
+            ],
+            settings: ['captions', 'quality', 'speed', 'loop'],
+            speed: { selected: 1, options: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] },
+            // FIX 3: ratio prevents player from collapsing to 0-height before metadata
+            ratio: '16:9',
+            invertTime: false,
+            toggleInvert: false,
         });
 
-    });
+        // FIX 3: Once video metadata loads, show controls panel and populate tracks
+        videoEl.addEventListener('loadedmetadata', function () {
+            document.getElementById('controls-panel').style.display = 'flex';
+            populateAudioTracks();
+            populateSubtitleTracks();
+        });
 
-</script>
+        // ═══════════════════════════════════════════════════════════
+        // FIX 5: Audio track switching
+        // ═══════════════════════════════════════════════════════════
+        function populateAudioTracks() {
+            const sel = document.getElementById('audio-track-sel');
+            const noMsg = document.getElementById('no-audio-tracks');
+            sel.innerHTML = '';
 
-<script src="js/wow.min.js"></script>
+            // AudioTrackList is supported in Chrome/Edge/Safari for MP4
+            if (videoEl.audioTracks && videoEl.audioTracks.length > 0) {
+                Array.from(videoEl.audioTracks).forEach((track, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.textContent = track.label || track.language || `Track ${i + 1}`;
+                    if (track.enabled) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+                noMsg.textContent = '';
+            } else {
+                const opt = document.createElement('option');
+                opt.value = 0;
+                opt.textContent = 'Default';
+                sel.appendChild(opt);
+                noMsg.textContent = 'Single audio track detected';
+            }
+        }
 
-<script>
+        function changeAudioTrack(idx) {
+            if (!videoEl.audioTracks || videoEl.audioTracks.length === 0) return;
+            Array.from(videoEl.audioTracks).forEach((track, i) => {
+                track.enabled = (i === parseInt(idx));
+            });
+        }
 
-    new WOW().init();
+        // ═══════════════════════════════════════════════════════════
+        // FIX 5: Subtitle / caption track switching
+        // ═══════════════════════════════════════════════════════════
+        function populateSubtitleTracks() {
+            const sel = document.getElementById('subtitle-sel');
+            const noMsg = document.getElementById('no-sub-tracks');
+            // keep the "Off" option
+            sel.innerHTML = '<option value="-1">Off</option>';
 
-</script>
+            const tracks = Array.from(videoEl.textTracks || []).filter(
+                t => t.kind === 'subtitles' || t.kind === 'captions'
+            );
 
-<script src="https://cdn.plyr.io/3.6.9/plyr.js"></script>
+            if (tracks.length > 0) {
+                tracks.forEach((track, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.textContent = track.label || track.language || `Track ${i + 1}`;
+                    sel.appendChild(opt);
+                });
+                noMsg.textContent = '';
+            } else {
+                noMsg.textContent = 'No subtitle tracks found in this file';
+            }
+        }
 
-<script src="https://biisal.github.io/Resources/StreamJs.js"></script>
+        function changeSubtitle(idx) {
+            const tracks = Array.from(videoEl.textTracks || []).filter(
+                t => t.kind === 'subtitles' || t.kind === 'captions'
+            );
+            tracks.forEach((track, i) => {
+                track.mode = (i === parseInt(idx)) ? 'showing' : 'hidden';
+            });
+        }
 
-<script src="script.js"></script>
+        // ═══════════════════════════════════════════════════════════
+        // FIX 5: Playback speed
+        // ═══════════════════════════════════════════════════════════
+        function changeSpeed(val) {
+            videoEl.playbackRate = parseFloat(val);
+            player.speed = parseFloat(val);
+        }
 
+        // ═══════════════════════════════════════════════════════════
+        // FIX 2: External player deep-links
+        //
+        // The original buttons called JS functions that were never
+        // defined (they relied on a missing StreamJs.js). Below are
+        // the correct intent/scheme URLs for each player.
+        //
+        // On Android:  intent:// and custom schemes open the app.
+        // On desktop:  VLC and KMPlayer support vlc:// and kmp:// 
+        //              We fall back to a copy-URL prompt on desktop.
+        // ═══════════════════════════════════════════════════════════
 
+        const encodedUrl = encodeURIComponent(fileUrl);
+        const encodedName = encodeURIComponent(fileName);
 
+        function isAndroid() {
+            return /android/i.test(navigator.userAgent);
+        }
+
+        // ── VLC ──────────────────────────────────────────────────
+        // vlc:// scheme works on both Android VLC and desktop VLC
+        function openVLC() {
+            const vlcUrl = 'vlc://' + fileUrl;
+            window.location.href = vlcUrl;
+            // Fallback: if vlc:// doesn't trigger anything after 1.5s, show copy prompt
+            setTimeout(() => {
+                if (document.hasFocus()) {
+                    copyToClipboard(fileUrl, 'VLC');
+                }
+            }, 1500);
+        }
+
+        // ── MX Player ────────────────────────────────────────────
+        // Android intent URL — opens MX Player directly with the stream URL
+        function openMX() {
+            if (isAndroid()) {
+                // intent scheme that Android Chrome/WebView can handle
+                const intent = `intent:${fileUrl}#Intent;` +
+                    `package=com.mxtech.videoplayer.ad;` +
+                    `S.title=${encodedName};` +
+                    `end`;
+                window.location.href = intent;
+                setTimeout(() => {
+                    if (document.hasFocus()) {
+                        // Fallback: try free version package
+                        window.location.href = `intent:${fileUrl}#Intent;` +
+                            `package=com.mxtech.videoplayer.pro;` +
+                            `S.title=${encodedName};end`;
+                    }
+                }, 1500);
+            } else {
+                // Desktop: MX Player Web
+                window.open(`https://play.google.com/store/apps/details?id=com.mxtech.videoplayer.ad`, '_blank');
+                copyToClipboard(fileUrl, 'MX Player');
+            }
+        }
+
+        // ── PLAYit ───────────────────────────────────────────────
+        function openPlayit() {
+            if (isAndroid()) {
+                const intent = `intent:${fileUrl}#Intent;` +
+                    `package=com.playit.videoplayer;` +
+                    `S.title=${encodedName};end`;
+                window.location.href = intent;
+                setTimeout(() => {
+                    if (document.hasFocus()) copyToClipboard(fileUrl, 'PLAYit');
+                }, 1500);
+            } else {
+                window.open('https://play.google.com/store/apps/details?id=com.playit.videoplayer', '_blank');
+                copyToClipboard(fileUrl, 'PLAYit');
+            }
+        }
+
+        // ── KM Player ────────────────────────────────────────────
+        function openKM() {
+            if (isAndroid()) {
+                const intent = `intent:${fileUrl}#Intent;` +
+                    `package=com.kmplayer;` +
+                    `S.title=${encodedName};end`;
+                window.location.href = intent;
+                setTimeout(() => {
+                    if (document.hasFocus()) copyToClipboard(fileUrl, 'KM Player');
+                }, 1500);
+            } else {
+                // Desktop KMPlayer supports kmp:// on Windows
+                window.location.href = `kmp://${fileUrl}`;
+                setTimeout(() => {
+                    if (document.hasFocus()) copyToClipboard(fileUrl, 'KM Player');
+                }, 1500);
+            }
+        }
+
+        // ── nPlayer ──────────────────────────────────────────────
+        function openNPlayer() {
+            const scheme = fileUrl.startsWith('https') ?
+                'nplayer-https' : 'nplayer-http';
+            const nUrl = fileUrl.replace(/^https?/, scheme);
+            window.location.href = nUrl;
+            setTimeout(() => {
+                if (document.hasFocus()) copyToClipboard(fileUrl, 'nPlayer');
+            }, 1500);
+        }
+
+        // ── Helper: copy URL with a toast notification ────────────
+        function copyToClipboard(url, playerName) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(() => {
+                    showToast(`App not found or couldn't open. URL copied! Paste it into ${playerName}.`);
+                }).catch(() => fallbackCopy(url, playerName));
+            } else {
+                fallbackCopy(url, playerName);
+            }
+        }
+
+        function fallbackCopy(url, playerName) {
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            ta.style.cssText = 'position:fixed;opacity:0';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                showToast(`URL copied! Paste it into ${playerName}.`);
+            } catch(e) {
+                showToast(`Open ${playerName} manually and paste this URL:\n${url}`);
+            }
+            document.body.removeChild(ta);
+        }
+
+        function showToast(msg) {
+            let t = document.getElementById('toast');
+            if (!t) {
+                t = document.createElement('div');
+                t.id = 'toast';
+                t.style.cssText = `
+                    position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+                    background:#1e1e3a;color:#eee;padding:12px 22px;border-radius:10px;
+                    font-size:0.85rem;z-index:9999;border:1px solid #7c3aed;
+                    max-width:90vw;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.5);
+                `;
+                document.body.appendChild(t);
+            }
+            t.textContent = msg;
+            t.style.display = 'block';
+            clearTimeout(t._timeout);
+            t._timeout = setTimeout(() => { t.style.display = 'none'; }, 4000);
+        }
+    </script>
+</body>
 </html>
-
-
-
-<!-- this code is written by @biisal tg:biisal-files & modified by TechifyBots -->
-
-<!-- stealing credit doesn't make you developer..so try to give full credit to the developer 😊 u will not loose anything for giving proper credit.   -->
