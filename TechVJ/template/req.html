@@ -336,9 +336,7 @@
         <div class="ctrl-group">
             <label><i class="fa fa-closed-captioning"></i> Subtitles</label>
             <div class="track-loading" id="subLoading">Detecting tracks…</div>
-            <select id="subSel" style="display:none" onchange="switchSubtitle(this.value)">
-                <option value="-1">Off</option>
-            </select>
+            <select id="subSel" style="display:none" onchange="switchSubtitle(this.value)"></select>
             <div class="ctrl-note" id="subNote"></div>
         </div>
 
@@ -584,181 +582,230 @@ function z(n) { return String(n).padStart(2,"0"); }
 // ════════════════════════════════════════════════════════════════════════════
 // AUDIO & SUBTITLE TRACK SYSTEM
 //
-// Problem: MKV/MKA files contain multiple audio and subtitle streams that
-// the browser CANNOT switch between natively — the browser decodes only the
-// first audio stream and ignores embedded subtitle formats like ASS/SSA.
+// Audio switching: Uses HTMLMediaElement.audioTracks API directly — no
+// video reload needed, no CPU cost, no ffmpeg. Works in Chrome, Edge,
+// Safari for MKV/MP4 multi-audio files.
 //
-// Solution:
-//   1. On metadata load, call GET /info/{id}?hash= → returns JSON list of
-//      audio tracks and subtitle tracks (detected by ffprobe server-side).
-//   2. Audio switching: we reload the <video> src with a custom
-//      ?audio=N query param that the server can use (if transcoding is
-//      enabled), OR we fall back to the browser's AudioTrackList API.
-//   3. Subtitles: each track is served as WebVTT via GET /sub/{id}/{n}?hash=
-//      The server extracts it on-the-fly with ffmpeg. We create <track>
-//      elements dynamically, one per subtitle stream.
+// Subtitles: fetched from /sub/{id}/{n}?hash= as WebVTT served by the
+// server's ffmpeg extractor. <track> elements are created once, then
+// shown/hidden by setting textTrack.mode.
+//
+// Fix — duplicate options: subSel is cleared completely before population.
+// Fix — subtitles not showing: we control the HTMLTrackElement directly
+//       rather than indexing vid.textTracks by stream index (which drifts).
 // ════════════════════════════════════════════════════════════════════════════
 
-let subtitleTracks   = [];   // [{index, label, lang}]
-let activeSubIdx     = -1;   // -1 = off
-let subTrackElements = {};   // index → <track> DOM element
+let subtitleTracks   = [];    // [{index, label, lang}]
+let activeSubIdx     = -1;    // -1 = off
+// Map ffprobe sub index → { trackEl: HTMLTrackElement, textTrack: TextTrack }
+let subTrackMap      = {};
+let tracksLoaded     = false; // guard against double-call
 
 async function loadTrackInfo() {
+    if (tracksLoaded) return;
+    tracksLoaded = true;
+
     const infoUrl = `${BASE_URL}/info/${MSG_ID}?hash=${HASH}`;
     try {
         const res  = await fetch(infoUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-
-        buildAudioSelector(data.audio   || []);
-        buildSubSelector(data.subtitles || []);
+        buildAudioSelector(data.audio    || []);
+        buildSubSelector(data.subtitles  || []);
     } catch(err) {
-        // /info endpoint not available — fall back to HTMLMediaElement APIs
-        audioLoading.textContent = "Track info unavailable";
-        subLoading.textContent   = "Track info unavailable";
+        console.warn("Track info fetch failed, using browser fallback:", err);
         fallbackAudioTracks();
         fallbackSubtitleTracks();
     }
 }
 
-// ── Audio ────────────────────────────────────────────────────────────────────
-function buildAudioSelector(tracks) {
+// ── Audio ─────────────────────────────────────────────────────────────────────
+// We use HTMLMediaElement.audioTracks directly — the browser already has all
+// audio tracks decoded from the stream. No reload, no CPU, no ffmpeg needed.
+function buildAudioSelector(ffprobeTracks) {
     audioLoading.style.display = "none";
 
-    if (tracks.length <= 1) {
-        audioNote.textContent = tracks.length === 0
-            ? "No audio tracks detected"
-            : "Single audio track";
-        // Still show the selector with "Default"
-        audioSel.innerHTML = '<option value="0">Default</option>';
+    // Always prefer the live browser audioTracks — they are what actually plays
+    if (vid.audioTracks && vid.audioTracks.length > 0) {
+        audioSel.innerHTML = "";
+        Array.from(vid.audioTracks).forEach((t, i) => {
+            // Match ffprobe metadata for richer labels if available
+            const meta  = ffprobeTracks[i] || {};
+            const label = meta.label || t.label || t.language || `Track ${i + 1}`;
+            const lang  = meta.lang  || t.language || "";
+            const o     = document.createElement("option");
+            o.value       = i;
+            o.textContent = lang ? `${label} - ${lang}` : label;
+            if (t.enabled) o.selected = true;
+            audioSel.appendChild(o);
+        });
+        // Wire the change handler directly to audioTracks
+        audioSel.onchange = (e) => {
+            const chosen = parseInt(e.target.value);
+            Array.from(vid.audioTracks).forEach((t, i) => { t.enabled = (i === chosen); });
+        };
         audioSel.style.display = "block";
+        if (vid.audioTracks.length === 1) {
+            audioNote.textContent = "Single audio track";
+        }
         return;
     }
 
+    // audioTracks not yet populated (fires before metadata) — use ffprobe data
+    if (ffprobeTracks.length === 0) {
+        audioSel.innerHTML = '<option value="0">Default</option>';
+        audioSel.style.display = "block";
+        audioNote.textContent  = "No audio tracks detected";
+        return;
+    }
+    if (ffprobeTracks.length === 1) {
+        const t = ffprobeTracks[0];
+        const label = t.label || "Default";
+        const lang  = t.lang  || "";
+        audioSel.innerHTML = `<option value="0">${lang ? label + " - " + lang : label}</option>`;
+        audioSel.style.display = "block";
+        audioNote.textContent  = "Single audio track";
+        return;
+    }
+    // Multiple tracks from ffprobe but audioTracks API unavailable (unlikely in Chrome)
     audioSel.innerHTML = "";
-    tracks.forEach(t => {
-        const o = document.createElement("option");
+    ffprobeTracks.forEach(t => {
+        const label = t.label || `Audio ${t.index + 1}`;
+        const lang  = t.lang  || "";
+        const o     = document.createElement("option");
         o.value       = t.index;
-        o.textContent = t.label;
+        o.textContent = lang ? `${label} - ${lang}` : label;
         audioSel.appendChild(o);
     });
     audioSel.style.display = "block";
-    audioNote.textContent  = "Note: Audio switching requires page reload for multi-track MKV files";
+    audioNote.textContent  = "⚠ Audio switching requires browser support (use Chrome/Edge)";
 }
 
-function switchAudio(idx) {
-    // Save position and switch audio by reloading with ?audio= param
-    // The server currently streams all bytes; for true audio switching
-    // the cleanest cross-browser approach is reload with the track hint.
-    const currentTime = vid.currentTime;
-    const url = new URL(FILE_URL);
-    url.searchParams.set("audio", idx);
-    vid.src = url.toString();
-    vid.load();
-    vid.addEventListener("loadedmetadata", () => { vid.currentTime = currentTime; vid.play(); }, {once:true});
-}
-
-// Fallback: use HTMLMediaElement.audioTracks (Safari/Edge only)
+// Fallback: browser audioTracks only, no ffprobe data
 function fallbackAudioTracks() {
     audioLoading.style.display = "none";
-    if (vid.audioTracks && vid.audioTracks.length > 1) {
+    if (vid.audioTracks && vid.audioTracks.length > 0) {
         audioSel.innerHTML = "";
-        Array.from(vid.audioTracks).forEach((t,i) => {
+        Array.from(vid.audioTracks).forEach((t, i) => {
             const o = document.createElement("option");
             o.value       = i;
-            o.textContent = t.label || t.language || `Track ${i+1}`;
+            o.textContent = (t.label && t.language) ? `${t.label} - ${t.language}`
+                          : (t.label || t.language  || `Track ${i + 1}`);
             if (t.enabled) o.selected = true;
             audioSel.appendChild(o);
         });
         audioSel.onchange = (e) => {
-            Array.from(vid.audioTracks).forEach((t,i) => { t.enabled = (i === parseInt(e.target.value)); });
+            const chosen = parseInt(e.target.value);
+            Array.from(vid.audioTracks).forEach((t, i) => { t.enabled = (i === chosen); });
         };
         audioSel.style.display = "block";
     } else {
-        audioSel.innerHTML = '<option value="0">Default</option>';
+        audioSel.innerHTML    = '<option value="0">Default</option>';
         audioSel.style.display = "block";
-        audioNote.textContent = "Single audio track";
+        audioNote.textContent  = "Single audio track";
     }
 }
 
-// ── Subtitles ────────────────────────────────────────────────────────────────
+// ── Subtitles ─────────────────────────────────────────────────────────────────
 function buildSubSelector(tracks) {
     subLoading.style.display = "none";
     subtitleTracks = tracks;
+    subTrackMap    = {};
+
+    // Always clear fully before populating — prevents double-entry bug
+    subSel.innerHTML = '<option value="-1">Off</option>';
 
     if (tracks.length === 0) {
-        subNote.textContent = "No subtitles found in this file";
-        subSel.style.display = "block";
+        subNote.textContent   = "No subtitles found in this file";
+        subSel.style.display  = "block";
         return;
     }
 
-    // Add track options
     tracks.forEach(t => {
+        // Option in selector
         const o = document.createElement("option");
         o.value       = t.index;
-        o.textContent = t.label;
+        o.textContent = t.label + (t.lang ? ` [${t.lang}]` : "");
         subSel.appendChild(o);
-    });
-    subSel.style.display  = "block";
-    subToggleBtn.style.display = "flex"; // show CC button in player
 
-    // Pre-create <track> elements for each subtitle stream
-    tracks.forEach(t => {
-        const trackEl        = document.createElement("track");
-        trackEl.kind         = "subtitles";
-        trackEl.label        = t.label;
-        trackEl.srclang      = t.lang || "und";
-        trackEl.src          = `${BASE_URL}/sub/${MSG_ID}/${t.index}?hash=${HASH}`;
-        trackEl.mode         = "hidden";
+        // <track> element pointing to server's WebVTT endpoint
+        const trackEl      = document.createElement("track");
+        trackEl.kind       = "subtitles";
+        trackEl.label      = t.label;
+        trackEl.srclang    = t.lang || "und";
+        trackEl.src        = `${BASE_URL}/sub/${MSG_ID}/${t.index}?hash=${HASH}`;
+        // Keep hidden until user selects
+        trackEl.default    = false;
         vid.appendChild(trackEl);
-        subTrackElements[t.index] = trackEl;
+
+        // Store reference — we'll control via the element, not by textTracks index
+        subTrackMap[t.index] = trackEl;
     });
 
-    subNote.textContent = `${tracks.length} subtitle track${tracks.length>1?"s":""} available`;
+    subSel.style.display       = "block";
+    subToggleBtn.style.display = "flex";
+    subNote.textContent        = `${tracks.length} subtitle track${tracks.length > 1 ? "s" : ""} available`;
 }
 
-function switchSubtitle(idx) {
-    activeSubIdx = parseInt(idx);
+function switchSubtitle(val) {
+    activeSubIdx = parseInt(val);
 
-    // Hide all first
-    Array.from(vid.textTracks).forEach(t => { t.mode = "hidden"; });
+    // Hide every track element we created
+    Object.values(subTrackMap).forEach(el => {
+        // Controlling TextTrack via the HTMLTrackElement's .track property
+        // is the most reliable cross-browser approach
+        if (el.track) el.track.mode = "hidden";
+    });
 
-    if (activeSubIdx >= 0 && subTrackElements[activeSubIdx]) {
-        subTrackElements[activeSubIdx].mode = "showing";
-        // Also set via textTracks if browser has loaded it
-        const tt = vid.textTracks[activeSubIdx];
-        if (tt) tt.mode = "showing";
+    if (activeSubIdx >= 0 && subTrackMap[activeSubIdx]) {
+        const el = subTrackMap[activeSubIdx];
+        // Force load if not yet loaded (some browsers lazy-load <track> src)
+        if (el.readyState === HTMLTrackElement.NONE) {
+            el.src = el.src; // re-trigger load
+        }
+        // Use a small delay so the browser has time to parse the WebVTT
+        setTimeout(() => {
+            if (el.track) el.track.mode = "showing";
+        }, 80);
+        subVisible = true;
+    } else {
+        subVisible = false;
     }
 }
 
 let subVisible = false;
 function toggleSubtitle() {
-    subVisible = !subVisible;
-    if (subVisible && subtitleTracks.length > 0) {
-        const firstIdx = subtitleTracks[0].index;
-        subSel.value = firstIdx;
-        switchSubtitle(firstIdx);
-    } else {
-        subSel.value = -1;
+    if (subVisible || activeSubIdx >= 0) {
+        subSel.value = "-1";
         switchSubtitle(-1);
+    } else if (subtitleTracks.length > 0) {
+        const firstIdx = subtitleTracks[0].index;
+        subSel.value   = firstIdx;
+        switchSubtitle(firstIdx);
     }
 }
 
-// Fallback: use HTMLMediaElement.textTracks (for WebVTT in MP4)
+// Fallback: native textTracks (MP4 with WebVTT subs, no /info endpoint)
 function fallbackSubtitleTracks() {
     subLoading.style.display = "none";
-    const tracks = Array.from(vid.textTracks).filter(t => t.kind==="subtitles"||t.kind==="captions");
+    subSel.innerHTML = '<option value="-1">Off</option>';
+
+    const tracks = Array.from(vid.textTracks)
+        .filter(t => t.kind === "subtitles" || t.kind === "captions");
+
     if (tracks.length > 0) {
-        tracks.forEach((t,i) => {
+        tracks.forEach((t, i) => {
             const o = document.createElement("option");
             o.value       = i;
-            o.textContent = t.label || t.language || `Track ${i+1}`;
+            o.textContent = (t.label && t.language) ? `${t.label} [${t.language}]`
+                          : (t.label || t.language  || `Track ${i + 1}`);
             subSel.appendChild(o);
         });
         subSel.onchange = e => {
             const idx = parseInt(e.target.value);
-            tracks.forEach((t,i) => { t.mode = (i===idx) ? "showing" : "hidden"; });
+            tracks.forEach((t, i) => { t.mode = (i === idx) ? "showing" : "hidden"; });
         };
-        subSel.style.display = "block";
+        subSel.style.display       = "block";
         subToggleBtn.style.display = "flex";
     } else {
         subNote.textContent  = "No subtitles in this file";
