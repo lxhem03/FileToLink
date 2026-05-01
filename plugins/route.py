@@ -199,7 +199,11 @@ async def audio_handler(request: web.Request):
         raise web.HTTPInternalServerError(text=str(e))
 
 # ── /sub/{id}/{track}?hash= ───────────────────────────────────────────────────
-# Extracts subtitle track as WebVTT. Fully buffered (subs are small).
+# Extracts a subtitle track as WebVTT using ffmpeg.
+# Results are cached in memory so repeated requests (e.g. after audio switch)
+# are instant and don't re-run ffmpeg.
+_sub_cache: dict = {}  # key: (id, track_index) → bytes
+
 @routes.get(r"/sub/{id:\d+}/{track:\d+}", allow_head=True)
 async def subtitle_handler(request: web.Request):
     try:
@@ -209,42 +213,66 @@ async def subtitle_handler(request: web.Request):
 
         _, file_id, _, _ = await _get_streamer_and_file(id, secure_hash)
 
+        cache_key = (id, track_index)
+        if cache_key in _sub_cache:
+            logging.debug(f"Subtitle cache hit for id={id} track={track_index}")
+            return web.Response(
+                body=_sub_cache[cache_key],
+                content_type="text/vtt",
+                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+            )
+
         from urllib.parse import quote_plus
         file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
 
+        # -nostdin          : prevent ffmpeg hanging waiting for input
+        # -probesize 50M    : read up to 50MB to find streams (MKV index is at end)
+        # -analyzeduration 0: don't waste time analysing audio/video duration
+        # -map 0:s:{n}      : select nth subtitle stream only
+        # -f webvtt         : output as WebVTT (browser-native format)
+        # stderr to PIPE so we can log errors; not quiet so errors are visible
         cmd = [
-            "ffmpeg", "-v", "quiet",
+            "ffmpeg",
+            "-nostdin",
+            "-probesize", "50M",
+            "-analyzeduration", "0",
             "-i", file_url,
             "-map", f"0:s:{track_index}",
             "-f", "webvtt",
             "pipe:1"
         ]
+        logging.info(f"Running ffmpeg subtitle extraction: id={id} track={track_index}")
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=90)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         except asyncio.TimeoutError:
-            raise web.HTTPGatewayTimeout(text="Subtitle extraction timed out")
+            proc.kill()
+            await proc.wait()
+            logging.error(f"ffmpeg subtitle timeout: id={id} track={track_index}")
+            raise web.HTTPGatewayTimeout(text="Subtitle extraction timed out — file may be too large")
 
         if proc.returncode != 0 or not stdout:
-            logging.warning(f"ffmpeg sub failed id={id} track={track_index}: {stderr.decode()[:300]}")
-            raise web.HTTPNotFound(text="Subtitle track not found")
+            err_msg = stderr.decode(errors="replace")[:500]
+            logging.warning(f"ffmpeg sub failed id={id} track={track_index} rc={proc.returncode}: {err_msg}")
+            raise web.HTTPNotFound(text=f"Subtitle track not found. ffmpeg error: {err_msg[:200]}")
+
+        # Cache in memory (subtitles are typically 100KB–2MB)
+        _sub_cache[cache_key] = stdout
+        logging.info(f"Subtitle extracted and cached: id={id} track={track_index} size={len(stdout)}B")
 
         return web.Response(
             body=stdout,
             content_type="text/vtt",
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "public, max-age=3600",
-            }
+            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
         )
     except (web.HTTPForbidden, web.HTTPNotFound, web.HTTPGatewayTimeout):
         raise
     except InvalidHash:
         raise web.HTTPForbidden(text="Invalid hash")
     except Exception as e:
-        logging.error(f"Subtitle handler error: {e}")
+        logging.error(f"Subtitle handler error: {e}", exc_info=True)
         raise web.HTTPInternalServerError(text=str(e))
 
 # ── Download / stream ─────────────────────────────────────────────────────────
