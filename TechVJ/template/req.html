@@ -473,7 +473,10 @@ function togglePlay() {
 }
 
 function skip(sec) {
-    vid.currentTime = Math.max(0, Math.min(vid.duration || 0, vid.currentTime + sec));
+    // isFinite() check: vid.duration is NaN before metadata loads,
+    // and (NaN || 0) = 0 which clamps everything to start. 
+    if (!isFinite(vid.duration)) return;
+    vid.currentTime = Math.max(0, Math.min(vid.duration, vid.currentTime + sec));
 }
 
 function setVolume(v) {
@@ -744,6 +747,13 @@ function buildSubSelector(tracks) {
     subToggleBtn.style.display = "flex";
     subNote.textContent        = `${tracks.length} subtitle track${tracks.length > 1 ? "s" : ""} available`;
     subSel.onchange = (e) => switchSubtitle(parseInt(e.target.value));
+
+    // Log track URLs to console so you can manually verify they load
+    console.group("Subtitle tracks registered");
+    tracks.forEach(t => {
+        console.log(`Track ${t.index}: ${t.label} [${t.lang}] → ${BASE_URL}/sub/${MSG_ID}/${t.index}?hash=${HASH}`);
+    });
+    console.groupEnd();
 }
 
 // Re-attach <track> elements after an audio src swap clears them
@@ -768,38 +778,62 @@ function reattachSubtitles() {
 function switchSubtitle(idx) {
     activeSubIdx = idx;
 
-    // Hide every track first
+    // Hide all tracks
     Object.values(subTrackMap).forEach(el => {
         if (el.track) el.track.mode = "hidden";
     });
 
-    if (idx >= 0 && subTrackMap[idx]) {
-        const el = subTrackMap[idx];
-
-        // Force the browser to fetch the WebVTT if it hasn't yet
-        if (el.readyState === HTMLTrackElement.NONE ||
-            el.readyState === HTMLTrackElement.LOADING) {
-            // Reassigning src triggers a fresh load
-            const src = el.src;
-            el.src = "";
-            el.src = src;
-        }
-
-        // Show after a brief delay so WebVTT has time to be fetched and parsed
-        const show = () => { if (el.track) el.track.mode = "showing"; };
-        if (el.readyState === HTMLTrackElement.LOADED) {
-            show();
-        } else {
-            el.addEventListener("load",  show, { once: true });
-            el.addEventListener("error", () => {
-                toast("⚠ Could not load subtitle track. Is ffmpeg installed on the server?");
-            }, { once: true });
-            setTimeout(show, 500); // hard fallback
-        }
-        subVisible = true;
-    } else {
+    if (idx < 0 || !subTrackMap[idx]) {
         subVisible = false;
+        return;
     }
+
+    const el = subTrackMap[idx];
+
+    function showTrack() {
+        if (el.track) {
+            el.track.mode = "showing";
+            subVisible = true;
+        }
+    }
+
+    // LOADED (2) = WebVTT already fetched and parsed, show immediately
+    if (el.readyState === 2) {
+        showTrack();
+        return;
+    }
+
+    // ERROR (3) = previous fetch failed, try fetching again with a fresh element
+    if (el.readyState === 3) {
+        vid.removeChild(el);
+        const fresh = document.createElement("track");
+        fresh.kind    = "subtitles";
+        fresh.label   = el.label;
+        fresh.srclang = el.srclang;
+        fresh.src     = el.src;
+        vid.appendChild(fresh);
+        subTrackMap[idx] = fresh;
+        fresh.addEventListener("load",  showTrack, { once: true });
+        fresh.addEventListener("error", () => toast("⚠ Subtitle load failed — check server logs"), { once: true });
+        return;
+    }
+
+    // NONE (0) or LOADING (1): browser hasn't fetched yet or is fetching.
+    // Nudge it by re-assigning src (required in some Chrome versions).
+    if (el.readyState === 0) {
+        const s = el.src; el.src = ""; el.src = s;
+    }
+
+    el.addEventListener("load",  showTrack, { once: true });
+    el.addEventListener("error", () => {
+        toast("⚠ Subtitle load failed — server returned an error");
+    }, { once: true });
+
+    // Hard fallback: if load event never fires within 8s, try showing anyway
+    // (Some browsers fire cuechange without firing load)
+    setTimeout(() => {
+        if (el.readyState === 2) showTrack();
+    }, 8000);
 }
 
 let subVisible = false;
@@ -814,6 +848,29 @@ function toggleSubtitle() {
         switchSubtitle(first);
     }
 }
+
+// ── Debug helper: run diagnoseSubs() in browser console to test subtitle URLs ──
+window.diagnoseSubs = async function() {
+    console.group("Subtitle diagnosis");
+    for (const [idx, el] of Object.entries(subTrackMap)) {
+        console.log(`Track ${idx}: readyState=${el.readyState}, src=${el.src}`);
+        try {
+            const r = await fetch(el.src);
+            const txt = await r.text();
+            console.log(`  → HTTP ${r.status}, ${txt.length} bytes, starts: ${txt.slice(0,80)}`);
+        } catch(e) {
+            console.error(`  → fetch failed:`, e);
+        }
+    }
+    console.groupEnd();
+};
+window.diagnoseTracks = function() {
+    console.group("Video textTracks");
+    Array.from(vid.textTracks).forEach((t,i) => {
+        console.log(`textTrack[${i}]: kind=${t.kind} label=${t.label} mode=${t.mode} cues=${t.cues ? t.cues.length : 'null'}`);
+    });
+    console.groupEnd();
+};
 
 // ════════════════════════════════════════════════════════════════════════════
 // EXTERNAL PLAYER DEEP LINKS
