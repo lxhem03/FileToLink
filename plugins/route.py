@@ -204,12 +204,22 @@ async def subtitle_handler(request: web.Request):
                 codec = ""
 
         is_ass = codec in ("ass", "ssa")
-        out_fmt = "ass" if is_ass else "webvtt"
-        ctype   = "text/x-ssa" if is_ass else "text/vtt"
+
+        # Strategy: ALWAYS produce WebVTT as the guaranteed fallback.
+        # ffmpeg converts ASS→WebVTT (text + timing preserved, styling stripped).
+        # We send X-Subtitle-Format: ass when the source was ASS so the client
+        # can attempt SubOctopus for rich styling — but if SubOctopus fails
+        # (CDN blocked etc.) the client re-fetches with ?fmt=webvtt and uses
+        # the native <track> renderer which always works.
+        # We also cache the WebVTT version so the fallback is instant.
+
+        # Always extract as WebVTT
+        out_fmt = "webvtt"
+        ctype   = "text/vtt"
 
         cmd = [
             "ffmpeg", "-nostdin", "-probesize", "50M", "-analyzeduration", "0",
-            "-i", file_url, "-map", f"0:s:{track_index}", "-f", out_fmt, "pipe:1"
+            "-i", file_url, "-map", f"0:s:{track_index}", "-f", "webvtt", "pipe:1"
         ]
         proc = await asyncio.create_subprocess_exec(*cmd,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -224,7 +234,8 @@ async def subtitle_handler(request: web.Request):
             logging.warning(f"ffmpeg sub failed id={id} track={track_index}: {err}")
             raise web.HTTPNotFound(text=f"Subtitle failed: {err[:150]}")
 
-        _sub_cache[cache_key] = (stdout, ctype, out_fmt)
+        # Store with original codec so client knows source format, but body is always WebVTT
+        _sub_cache[cache_key] = (stdout, ctype, 'ass' if is_ass else 'webvtt')
         _sub_codec_cache[cache_key] = codec
         return web.Response(body=stdout, content_type=ctype,
                             headers={"Access-Control-Allow-Origin": "*",
