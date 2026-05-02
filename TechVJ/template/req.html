@@ -267,7 +267,7 @@
     <!-- ── PLAYER ── -->
     <div class="player-shell" id="shell">
 
-        <video id="vid" preload="metadata" playsinline crossorigin="anonymous"></video>
+        <video id="vid" preload="auto" playsinline crossorigin="anonymous"></video>
         <!-- SubOctopus renders ASS subtitles onto this canvas overlay -->
         <div id="subCanvas" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;"></div>
 
@@ -462,6 +462,8 @@ const subNote     = document.getElementById("subNote");
 const subToggleBtn= document.getElementById("subToggleBtn");
 
 // ── Init video src ────────────────────────────────────────────────────────────
+// Set src with explicit type hint — prevents Chrome from stalling on MIME detection
+// for MKV/WebM files served from a custom server
 vid.src = FILE_URL;
 vid.load();
 
@@ -541,6 +543,14 @@ vid.addEventListener("progress", () => {
             progressBuf.style.width = (vid.buffered.end(i) / vid.duration * 100) + "%";
         }
     }
+});
+
+vid.addEventListener("error", (e) => {
+    const err = vid.error;
+    const msg = err ? `MediaError code=${err.code}: ${err.message}` : "Unknown video error";
+    console.error("Video error:", msg, e);
+    toast(`⚠ Video error: ${msg}`);
+    spinner.style.display = "none";
 });
 
 vid.addEventListener("loadedmetadata", () => {
@@ -704,7 +714,15 @@ function switchAudio(trackIdx) {
 }
 
 function resumeAt(t, play = true) {
-    vid.addEventListener("loadedmetadata", () => {
+    vid.addEventListener("error", (e) => {
+    const err = vid.error;
+    const msg = err ? `MediaError code=${err.code}: ${err.message}` : "Unknown video error";
+    console.error("Video error:", msg, e);
+    toast(`⚠ Video error: ${msg}`);
+    spinner.style.display = "none";
+});
+
+vid.addEventListener("loadedmetadata", () => {
         vid.currentTime = t;
         if (play) vid.play().catch(() => {});
     }, { once: true });
