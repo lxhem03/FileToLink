@@ -199,10 +199,12 @@ async def audio_handler(request: web.Request):
         raise web.HTTPInternalServerError(text=str(e))
 
 # ── /sub/{id}/{track}?hash= ───────────────────────────────────────────────────
-# Extracts a subtitle track as WebVTT using ffmpeg.
-# Results are cached in memory so repeated requests (e.g. after audio switch)
-# are instant and don't re-run ffmpeg.
-_sub_cache: dict = {}  # key: (id, track_index) → bytes
+# Extracts a subtitle track in its NATIVE format (ASS/SRT/etc.) using ffmpeg.
+# The client renders ASS/SSA using JavascriptSubtitlesOctopus (libass WASM).
+# SRT/VTT fallback: served as WebVTT for native browser <track> rendering.
+# Results are cached in memory — subs are small (100KB–2MB typically).
+_sub_cache: dict = {}   # (id, track_index) → (bytes, content_type, fmt)
+_sub_codec_cache: dict = {}  # (id, track_index) → codec string
 
 @routes.get(r"/sub/{id:\d+}/{track:\d+}", allow_head=True)
 async def subtitle_handler(request: web.Request):
@@ -215,33 +217,54 @@ async def subtitle_handler(request: web.Request):
 
         cache_key = (id, track_index)
         if cache_key in _sub_cache:
-            logging.debug(f"Subtitle cache hit for id={id} track={track_index}")
-            return web.Response(
-                body=_sub_cache[cache_key],
-                content_type="text/vtt",
-                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
-            )
+            data, ctype, fmt = _sub_cache[cache_key]
+            logging.debug(f"Sub cache hit id={id} track={track_index} fmt={fmt}")
+            return web.Response(body=data, content_type=ctype,
+                                headers={"Access-Control-Allow-Origin": "*",
+                                         "X-Subtitle-Format": fmt,
+                                         "Cache-Control": "public, max-age=86400"})
 
         from urllib.parse import quote_plus
         file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
 
-        # -nostdin          : prevent ffmpeg hanging waiting for input
-        # -probesize 50M    : read up to 50MB to find streams (MKV index is at end)
-        # -analyzeduration 0: don't waste time analysing audio/video duration
-        # -map 0:s:{n}      : select nth subtitle stream only
-        # -f webvtt         : output as WebVTT (browser-native format)
-        # stderr to PIPE so we can log errors; not quiet so errors are visible
+        # Detect codec from /info cache or re-probe
+        codec = _sub_codec_cache.get(cache_key, "")
+        if not codec:
+            probe_cmd = [
+                "ffprobe", "-v", "quiet", "-print_format", "json",
+                "-show_streams", "-select_streams", "s",
+                file_url
+            ]
+            pp = await asyncio.create_subprocess_exec(
+                *probe_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            try:
+                pout, _ = await asyncio.wait_for(pp.communicate(), timeout=20)
+                streams = _json.loads(pout).get("streams", [])
+                if track_index < len(streams):
+                    codec = streams[track_index].get("codec_name", "")
+            except Exception:
+                codec = ""
+
+        # Choose output format:
+        # ASS/SSA → extract as ASS (served raw, rendered by SubOctopus WASM)
+        # Everything else → convert to WebVTT (native browser <track>)
+        is_ass = codec in ("ass", "ssa")
+        if is_ass:
+            out_fmt, out_ext, content_type = "ass", "ass", "text/x-ssa"
+        else:
+            out_fmt, out_ext, content_type = "webvtt", "vtt", "text/vtt"
+
         cmd = [
-            "ffmpeg",
-            "-nostdin",
+            "ffmpeg", "-nostdin",
             "-probesize", "50M",
             "-analyzeduration", "0",
             "-i", file_url,
             "-map", f"0:s:{track_index}",
-            "-f", "webvtt",
+            "-f", out_fmt,
             "pipe:1"
         ]
-        logging.info(f"Running ffmpeg subtitle extraction: id={id} track={track_index}")
+        logging.info(f"Extracting subtitle id={id} track={track_index} codec={codec} fmt={out_fmt}")
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
@@ -250,22 +273,22 @@ async def subtitle_handler(request: web.Request):
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            logging.error(f"ffmpeg subtitle timeout: id={id} track={track_index}")
-            raise web.HTTPGatewayTimeout(text="Subtitle extraction timed out — file may be too large")
+            raise web.HTTPGatewayTimeout(text="Subtitle extraction timed out")
 
         if proc.returncode != 0 or not stdout:
-            err_msg = stderr.decode(errors="replace")[:500]
-            logging.warning(f"ffmpeg sub failed id={id} track={track_index} rc={proc.returncode}: {err_msg}")
-            raise web.HTTPNotFound(text=f"Subtitle track not found. ffmpeg error: {err_msg[:200]}")
+            err = stderr.decode(errors="replace")[:400]
+            logging.warning(f"ffmpeg sub failed id={id} track={track_index}: {err}")
+            raise web.HTTPNotFound(text=f"Subtitle extraction failed: {err[:150]}")
 
-        # Cache in memory (subtitles are typically 100KB–2MB)
-        _sub_cache[cache_key] = stdout
-        logging.info(f"Subtitle extracted and cached: id={id} track={track_index} size={len(stdout)}B")
+        _sub_cache[cache_key] = (stdout, content_type, out_fmt)
+        _sub_codec_cache[cache_key] = codec
+        logging.info(f"Subtitle cached id={id} track={track_index} size={len(stdout)}B fmt={out_fmt}")
 
         return web.Response(
-            body=stdout,
-            content_type="text/vtt",
-            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
+            body=stdout, content_type=content_type,
+            headers={"Access-Control-Allow-Origin": "*",
+                     "X-Subtitle-Format": out_fmt,
+                     "Cache-Control": "public, max-age=86400"}
         )
     except (web.HTTPForbidden, web.HTTPNotFound, web.HTTPGatewayTimeout):
         raise
