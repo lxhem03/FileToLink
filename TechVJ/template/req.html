@@ -253,9 +253,18 @@ const BASE_URL   = _u.origin;
 // ═══════════════════════════════════════════════════════════════════════
 // Show track panel once video metadata is available
 // ═══════════════════════════════════════════════════════════════════════
+// Show panel immediately — don't wait for loadedmetadata which may not fire
+// if the server response lacks Content-Length or the connection is slow
+document.getElementById("trackPanel").classList.add("visible");
+
+// Load track info immediately too — no need to wait for video metadata
+// since /info/ calls ffprobe independently on the server
+loadTrackInfo();
+
+// loadedmetadata is still used for the speed selector sync (harmless if it doesn't fire)
 player.addEventListener("loadedmetadata", () => {
-    document.getElementById("trackPanel").classList.add("visible");
-    loadTrackInfo();
+    // Panel already visible — nothing extra needed here
+    console.log("Video metadata loaded: duration=" + player.duration);
 });
 
 player.addEventListener("error", () => {
@@ -327,21 +336,82 @@ async function ensureOctopus() {
 async function loadTrackInfo() {
     if (tracksLoaded) return;
     tracksLoaded = true;
+
+    // Race: fetch /info/ against a 15s timeout
+    // If server is slow (ffprobe on free plan), fall back to browser APIs
+    const infoPromise = fetch(`${BASE_URL}/info/${MSG_ID}?hash=${HASH}`)
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+    const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("info timeout")), 15000));
+
     try {
-        const res  = await fetch(`${BASE_URL}/info/${MSG_ID}?hash=${HASH}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await Promise.race([infoPromise, timeoutPromise]);
         buildAudioSelector(data.audio    || []);
         buildSubSelector(data.subtitles  || []);
     } catch(e) {
-        console.warn("Track info unavailable:", e);
-        audioLoading.textContent = "Not available";
-        subLoading.textContent   = "Not available";
-        audioSel.innerHTML = '<option value="-1">Default</option>';
-        audioSel.style.display = "block";
-        subSel.innerHTML = '<option value="-1">Off</option>';
-        subSel.style.display = "block";
+        console.warn("Track info fetch failed/timeout:", e.message, "— using browser APIs");
+        useBrowserTrackFallback();
     }
+}
+
+// Fallback: use browser's native audioTracks / textTracks APIs
+// These populate after the video starts playing, so we poll briefly
+function useBrowserTrackFallback() {
+    let attempts = 0;
+    const maxAttempts = 20; // poll for up to 10s
+
+    function tryBrowserTracks() {
+        attempts++;
+        const hasAudio = player.audioTracks && player.audioTracks.length > 0;
+        const hasSubs  = player.textTracks  && player.textTracks.length  > 0;
+
+        if (hasAudio || hasSubs || attempts >= maxAttempts) {
+            // Build from browser APIs
+            const audioData = [];
+            if (player.audioTracks) {
+                Array.from(player.audioTracks).forEach((t, i) => {
+                    audioData.push({
+                        index: i,
+                        label: t.label || `Audio ${i+1}`,
+                        lang:  t.language || "",
+                    });
+                });
+            }
+            const subData = [];
+            if (player.textTracks) {
+                Array.from(player.textTracks).forEach((t, i) => {
+                    if (t.kind === "subtitles" || t.kind === "captions") {
+                        subData.push({
+                            index: i,
+                            label: t.label || `Subtitle ${i+1}`,
+                            lang:  t.language || "",
+                            codec: "webvtt",
+                        });
+                    }
+                });
+            }
+
+            buildAudioSelector(audioData);
+            buildSubSelector(subData);
+
+            if (audioData.length === 0) {
+                audioLoading.style.display = "none";
+                audioSel.innerHTML = '<option value="-1">Default</option>';
+                audioSel.style.display = "block";
+                audioNote.textContent = "Track info unavailable (server timeout)";
+            }
+            if (subData.length === 0) {
+                subLoading.style.display = "none";
+                subSel.innerHTML = '<option value="-1">Off</option>';
+                subSel.style.display = "block";
+                subNote.textContent = "Track info unavailable — try MX Player for subtitles";
+            }
+        } else {
+            setTimeout(tryBrowserTracks, 500);
+        }
+    }
+
+    setTimeout(tryBrowserTracks, 500);
 }
 
 // ── Audio ────────────────────────────────────────────────────────────
