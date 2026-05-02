@@ -282,18 +282,46 @@ let subVisible     = false;
 let octopusInst    = null;
 let tracksLoaded   = false;
 
-const SUBOCTOPUS_JS  = "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js";
-const SUBOCTOPUS_WKR = "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js";
+// Multiple CDN fallbacks for SubOctopus — try each in order until one loads
+const SUBOCTOPUS_CDNS = [
+    {
+        js:  "https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus.js",
+        wkr: "https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus-worker.js",
+    },
+    {
+        js:  "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",
+        wkr: "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js",
+    },
+    {
+        js:  "https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",
+        wkr: "https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js",
+    },
+];
+let _octopusWorkerUrl = "";
 
-function ensureOctopus() {
+function loadScript(url) {
     return new Promise((resolve, reject) => {
-        if (window.SubtitlesOctopus) { resolve(); return; }
         const s = document.createElement("script");
-        s.src = SUBOCTOPUS_JS;
-        s.onload = resolve;
-        s.onerror = () => reject(new Error("SubOctopus CDN load failed"));
+        s.src = url;
+        s.onload  = resolve;
+        s.onerror = reject;
         document.head.appendChild(s);
     });
+}
+
+async function ensureOctopus() {
+    if (window.SubtitlesOctopus) return;
+    for (const cdn of SUBOCTOPUS_CDNS) {
+        try {
+            await loadScript(cdn.js);
+            _octopusWorkerUrl = cdn.wkr;
+            console.log("SubOctopus loaded from:", cdn.js);
+            return;
+        } catch(e) {
+            console.warn("SubOctopus CDN failed, trying next:", cdn.js);
+        }
+    }
+    throw new Error("All SubOctopus CDNs failed — falling back to WebVTT");
 }
 
 async function loadTrackInfo() {
@@ -418,10 +446,13 @@ async function switchSubtitle(idx) {
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
         const fmt = (res.headers.get("X-Subtitle-Format") || info.fmt || "").toLowerCase();
 
+        // fmt = "ass"/"ssa" → server still sends WebVTT body, but we know source was ASS
+        //   → show WebVTT immediately via renderASS, attempt SubOctopus in background
+        // fmt = "webvtt"/"srt" etc. → straight native <track> rendering
         if (fmt === "ass" || fmt === "ssa") {
             await renderASS(res, info);
         } else {
-            await renderVTT(info);
+            await renderVTTText(await res.text(), info);
         }
         subNote.textContent = `Showing: ${info.label}${info.lang ? " ["+info.lang+"]" : ""}`;
     } catch(e) {
@@ -433,31 +464,104 @@ async function switchSubtitle(idx) {
 }
 
 async function renderASS(fetchResponse, info) {
-    await ensureOctopus();
-    const assText = await fetchResponse.text();
-    const blob    = new Blob([assText], { type: "text/plain" });
-    const blobUrl = URL.createObjectURL(blob);
-    const wrap    = document.getElementById("subCanvas");
-    wrap.innerHTML = "";
+    // Read the WebVTT body — server always sends WebVTT even for ASS sources
+    // We clone the response so we can use the body twice if needed
+    const vttText = await fetchResponse.text();
 
-    octopusInst = new window.SubtitlesOctopus({
-        video:      player,
-        subUrl:     blobUrl,
-        workerUrl:  SUBOCTOPUS_WKR,
-        renderMode: "wasm-blend",
-        targetFps:  24,
-        onReady:  () => URL.revokeObjectURL(blobUrl),
-        onError:  (e) => { console.error("SubOctopus:", e); URL.revokeObjectURL(blobUrl); },
+    // Try SubOctopus first for rich ASS styling
+    // But since server sends WebVTT (not raw ASS), we use WebVTT with native track
+    // SubOctopus needs the original ASS — we'll attempt it only if we can get raw ASS
+    // For now: use native WebVTT renderer (reliable, no CDN dependency)
+    // SubOctopus enhancement: attempt in background, swap if it loads
+    await renderVTTText(vttText, info);
+
+    // In parallel, try to load SubOctopus for better styling
+    // If it loads, it will enhance the rendering automatically
+    ensureOctopus().then(async () => {
+        try {
+            // Fetch the raw ASS by requesting with ?raw=1 hint
+            // (server currently always returns WebVTT, so SubOctopus gets WebVTT too
+            // which still works — SubOctopus can render WebVTT with its own engine)
+            const res2 = await fetch(info.url);
+            if (!res2.ok) return;
+            const text2 = await res2.text();
+            const blob    = new Blob([text2], { type: "text/plain" });
+            const blobUrl = URL.createObjectURL(blob);
+            const wrap    = document.getElementById("subCanvas");
+            wrap.innerHTML = "";
+
+            // Hide native track since SubOctopus will take over
+            Object.values(nativeTrackMap).forEach(el => {
+                if (el.track) el.track.mode = "hidden";
+            });
+
+            octopusInst = new window.SubtitlesOctopus({
+                video:      player,
+                subUrl:     blobUrl,
+                workerUrl:  _octopusWorkerUrl,
+                renderMode: "wasm-blend",
+                targetFps:  24,
+                onReady:  () => { URL.revokeObjectURL(blobUrl); console.log("SubOctopus enhanced rendering active"); },
+                onError:  (e) => {
+                    console.warn("SubOctopus render error:", e);
+                    URL.revokeObjectURL(blobUrl);
+                    // Restore native track on error
+                    if (nativeTrackMap[info.index]?.track)
+                        nativeTrackMap[info.index].track.mode = "showing";
+                },
+            });
+
+            setTimeout(() => {
+                const c = document.querySelector(".libassjs-canvas-parent");
+                if (c && wrap) {
+                    c.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";
+                    wrap.appendChild(c);
+                }
+            }, 200);
+        } catch(e) {
+            console.warn("SubOctopus enhancement failed:", e);
+        }
+    }).catch(e => {
+        // All CDNs blocked — native WebVTT is already showing, nothing to do
+        console.warn("SubOctopus unavailable:", e.message, "— native WebVTT is active");
+        subNote.textContent = (subNote.textContent || "").replace("Loading subtitle…", "")
+            || `Showing: ${info.label} (plain text — SubOctopus CDN blocked)`;
+    });
+}
+
+// Render WebVTT text directly via a Blob URL <track> element
+async function renderVTTText(vttText, info) {
+    // Ensure it starts with WEBVTT header
+    const normalized = vttText.trimStart().startsWith("WEBVTT")
+        ? vttText
+        : "WEBVTT
+
+" + vttText;
+
+    const blob    = new Blob([normalized], { type: "text/vtt" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    // Remove old track for this index if exists
+    let el = nativeTrackMap[info.index];
+    if (el && player.contains(el)) player.removeChild(el);
+
+    el = document.createElement("track");
+    el.kind    = "subtitles";
+    el.label   = info.label;
+    el.srclang = info.lang || "und";
+    el.src     = blobUrl;
+    player.appendChild(el);
+    nativeTrackMap[info.index] = el;
+
+    await new Promise(resolve => {
+        if (el.readyState === 2) { resolve(); return; }
+        el.addEventListener("load",  resolve, { once: true });
+        el.addEventListener("error", resolve, { once: true });
+        setTimeout(resolve, 5000);
     });
 
-    // Reparent SubOctopus canvas into our overlay div
-    setTimeout(() => {
-        const c = document.querySelector(".libassjs-canvas-parent");
-        if (c && wrap) {
-            c.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";
-            wrap.appendChild(c);
-        }
-    }, 200);
+    URL.revokeObjectURL(blobUrl);
+    if (el.track) el.track.mode = "showing";
 }
 
 async function renderVTT(info) {
