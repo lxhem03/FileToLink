@@ -322,7 +322,7 @@ async def download_handler(request: web.Request):
         raise web.HTTPInternalServerError(text=str(e))
 
 async def media_streamer(request: web.Request, id: int, secure_hash: str):
-    range_header = request.headers.get("Range", 0)
+    range_header = request.headers.get("Range", "")
     index = min(work_loads, key=work_loads.get)
     faster_client = multi_clients[index]
     if MULTI_CLIENT:
@@ -340,55 +340,84 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
     if file_id.unique_id[:6] != secure_hash:
         raise InvalidHash
     file_size = file_id.file_size
+
+    # ── Parse Range header ────────────────────────────────────────────────────
+    # FIX: Always default to full-file range when no Range header is present.
+    # Never touch request.http_range when range_header is empty — it is None
+    # and accessing .start raises AttributeError that gets silently swallowed,
+    # causing the video element to receive no response and hang at 0:00/0:00.
     if range_header:
-        from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
-        from_bytes = int(from_bytes)
-        until_bytes = int(until_bytes) if until_bytes else file_size - 1
+        try:
+            range_val = range_header.replace("bytes=", "")
+            start_str, end_str = range_val.split("-")
+            from_bytes  = int(start_str)
+            until_bytes = int(end_str) if end_str.strip() else file_size - 1
+        except Exception:
+            from_bytes  = 0
+            until_bytes = file_size - 1
     else:
-        from_bytes = request.http_range.start or 0
-        until_bytes = (request.http_range.stop or file_size) - 1
-    if (until_bytes > file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
-        return web.Response(
-            status=416,
-            body="416: Range not satisfiable",
-            headers={"Content-Range": f"bytes */{file_size}"},
-        )
-    chunk_size = 1024 * 1024
-    until_bytes = min(until_bytes, file_size - 1)
-    offset = from_bytes - (from_bytes % chunk_size)
+        from_bytes  = 0
+        until_bytes = file_size - 1
+
+    if (until_bytes >= file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
+        until_bytes = min(until_bytes, file_size - 1)
+        if from_bytes < 0 or from_bytes > until_bytes:
+            return web.Response(
+                status=416,
+                body="416: Range not satisfiable",
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+
+    chunk_size     = 1024 * 1024
+    until_bytes    = min(until_bytes, file_size - 1)
+    offset         = from_bytes - (from_bytes % chunk_size)
     first_part_cut = from_bytes - offset
-    last_part_cut = until_bytes % chunk_size + 1
-    req_length = until_bytes - from_bytes + 1
-    part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
+    last_part_cut  = until_bytes % chunk_size + 1
+    req_length     = until_bytes - from_bytes + 1
+    part_count     = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
+
     work_loads[index] += 1
     try:
         body = tg_connect.yield_file(
             file_id, index, offset, first_part_cut, last_part_cut, part_count, chunk_size
         )
+
+        # ── Resolve MIME type ─────────────────────────────────────────────────
         mime_type = file_id.mime_type
         file_name = file_id.file_name
-        if mime_type:
-            if not file_name:
-                try:
-                    file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
-                except:
-                    file_name = f"{secrets.token_hex(2)}.unknown"
-        else:
-            if file_name:
-                mime_type = mimetypes.guess_type(file_id.file_name)[0] or "application/octet-stream"
-            else:
-                mime_type = "application/octet-stream"
-                file_name = f"{secrets.token_hex(2)}.unknown"
-        disposition = "inline" if mime_type and mime_type.split("/")[0] in ("video","audio") else "attachment"
+
+        if not mime_type:
+            mime_type = (mimetypes.guess_type(file_name or "")[0]
+                         if file_name else None) or "application/octet-stream"
+        if not file_name:
+            ext = mime_type.split("/")[-1] if "/" in mime_type else "bin"
+            file_name = f"{secrets.token_hex(2)}.{ext}"
+
+        # FIX: Normalize MKV MIME type.
+        # Telegram returns "video/x-matroska" which Chrome on Android refuses
+        # to play inline. "video/webm" is accepted by all browsers for MKV/WebM.
+        if mime_type in ("video/x-matroska", "video/mkv"):
+            mime_type = "video/webm"
+
+        disposition = (
+            "inline" if mime_type.split("/")[0] in ("video", "audio")
+            else "attachment"
+        )
+
+        # ── Response ──────────────────────────────────────────────────────────
+        # FIX: Always return 206 when serving a range (even the first full
+        # request), and return clean 200 only when serving the complete file
+        # with no Range header. Sending Content-Range on a 200 confuses Chrome.
+        is_range_request = bool(range_header)
         return web.Response(
-            status=206 if range_header else 200,
+            status=206 if is_range_request else 200,
             body=body,
             headers={
-                "Content-Type": str(mime_type),
-                "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
-                "Content-Length": str(req_length),
+                "Content-Type":        str(mime_type),
+                "Content-Range":       f"bytes {from_bytes}-{until_bytes}/{file_size}" if is_range_request else f"bytes 0-{file_size-1}/{file_size}",
+                "Content-Length":      str(req_length),
                 "Content-Disposition": f'{disposition}; filename="{file_name}"',
-                "Accept-Ranges": "bytes",
+                "Accept-Ranges":       "bytes",
             },
         )
     finally:
