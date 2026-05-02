@@ -268,6 +268,8 @@
     <div class="player-shell" id="shell">
 
         <video id="vid" preload="metadata" playsinline crossorigin="anonymous"></video>
+        <!-- SubOctopus renders ASS subtitles onto this canvas overlay -->
+        <div id="subCanvas" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;"></div>
 
         <div class="spinner" id="spinner"></div>
 
@@ -709,134 +711,251 @@ function resumeAt(t, play = true) {
 }
 
 // ── SUBTITLES ─────────────────────────────────────────────────────────────────
-// Creates one <track kind="subtitles"> per track, pointing to /sub/{id}/{n}.
-// Browser fetches WebVTT on demand. We show/hide via el.track.mode.
+// Strategy:
+//   ASS/SSA → JavascriptSubtitlesOctopus (libass compiled to WASM).
+//             Full styling: colors, positioning, karaoke, fonts — exactly
+//             like VLC/MX Player. Renders onto a canvas overlay.
+//   SRT/VTT → Native browser <track> element with WebVTT served by server.
+//             Simple but reliable for plain-text subtitle formats.
+//
+// The server's /sub/{id}/{track} endpoint returns:
+//   - ASS files as  text/x-ssa  (X-Subtitle-Format: ass)
+//   - SRT/others as text/vtt    (X-Subtitle-Format: webvtt)
+// We check the X-Subtitle-Format header to decide which renderer to use.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// SubOctopus CDN — loads libass WASM worker
+const SUBOCTOPUS_JS  = "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js";
+const SUBOCTOPUS_WKR = "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js";
+
+let octopusInstance  = null;   // active SubtitlesOctopus instance
+let subTrackMap      = {};     // ffprobe_index → { url, fmt }
+let nativeTrackMap   = {};     // ffprobe_index → HTMLTrackElement  (SRT/VTT only)
+let activeSubIdx     = -1;
+let subVisible       = false;
+let octopusLoaded    = false;  // has the SubOctopus <script> been injected yet?
+
+// Lazy-load the SubOctopus script only when ASS is first needed
+function ensureOctopus() {
+    return new Promise((resolve, reject) => {
+        if (window.SubtitlesOctopus) { resolve(); return; }
+        if (octopusLoaded) {
+            // Script tag already added — wait for it
+            const wait = () => window.SubtitlesOctopus ? resolve() : setTimeout(wait, 100);
+            wait(); return;
+        }
+        octopusLoaded = true;
+        const s = document.createElement("script");
+        s.src = SUBOCTOPUS_JS;
+        s.onload  = resolve;
+        s.onerror = () => reject(new Error("SubOctopus failed to load"));
+        document.head.appendChild(s);
+    });
+}
+
 function buildSubSelector(tracks) {
     subLoading.style.display = "none";
     subtitleTracks = tracks;
     subTrackMap    = {};
+    nativeTrackMap = {};
 
-    // Always start fresh — prevents duplicate options bug
+    // Always clear fully — prevents duplicate options bug
     subSel.innerHTML = '<option value="-1">Off</option>';
 
     if (tracks.length === 0) {
-        subNote.textContent   = "No subtitles found in this file";
-        subSel.style.display  = "block";
+        subNote.textContent  = "No subtitles found in this file";
+        subSel.style.display = "block";
         return;
     }
 
     tracks.forEach(t => {
-        // Selector option
         const o = document.createElement("option");
         o.value       = t.index;
         o.textContent = t.lang ? `${t.label} [${t.lang}]` : t.label;
         subSel.appendChild(o);
 
-        // <track> element — browser fetches the WebVTT URL lazily
-        const el       = document.createElement("track");
-        el.kind        = "subtitles";
-        el.label       = t.label;
-        el.srclang     = t.lang || "und";
-        el.src         = `${BASE_URL}/sub/${MSG_ID}/${t.index}?hash=${HASH}`;
-        // Do NOT set el.default=true — that auto-shows on load which we don't want
-        vid.appendChild(el);
-        subTrackMap[t.index] = el;
+        // Store URL — we'll HEAD-check format when user selects
+        subTrackMap[t.index] = {
+            url:   `${BASE_URL}/sub/${MSG_ID}/${t.index}?hash=${HASH}`,
+            fmt:   t.codec || "",   // "ass","ssa","subrip","srt","webvtt"
+            label: t.label,
+            lang:  t.lang || "und",
+        };
     });
 
     subSel.style.display       = "block";
     subToggleBtn.style.display = "flex";
-    subNote.textContent        = `${tracks.length} subtitle track${tracks.length > 1 ? "s" : ""} available`;
+    subNote.textContent = `${tracks.length} subtitle track${tracks.length > 1 ? "s" : ""} — ASS & SRT supported`;
     subSel.onchange = (e) => switchSubtitle(parseInt(e.target.value));
 
-    // Log track URLs to console so you can manually verify they load
-    console.group("Subtitle tracks registered");
-    tracks.forEach(t => {
-        console.log(`Track ${t.index}: ${t.label} [${t.lang}] → ${BASE_URL}/sub/${MSG_ID}/${t.index}?hash=${HASH}`);
-    });
+    console.group("Subtitle tracks");
+    tracks.forEach(t => console.log(`  [${t.index}] ${t.label} [${t.lang}] codec=${t.codec} → ${subTrackMap[t.index].url}`));
     console.groupEnd();
 }
 
-// Re-attach <track> elements after an audio src swap clears them
-function reattachSubtitles() {
-    subtitleTracks.forEach(t => {
-        if (!subTrackMap[t.index] || !vid.contains(subTrackMap[t.index])) {
-            const el       = document.createElement("track");
-            el.kind        = "subtitles";
-            el.label       = t.label;
-            el.srclang     = t.lang || "und";
-            el.src         = `${BASE_URL}/sub/${MSG_ID}/${t.index}?hash=${HASH}`;
-            vid.appendChild(el);
-            subTrackMap[t.index] = el;
-        }
-    });
-    // Restore active subtitle if one was selected
-    if (activeSubIdx >= 0) {
-        setTimeout(() => switchSubtitle(activeSubIdx), 150);
+// Destroy any active octopus renderer and hide all native tracks
+function clearAllSubs() {
+    if (octopusInstance) {
+        try { octopusInstance.dispose(); } catch(e) {}
+        octopusInstance = null;
     }
-}
+    // Clear SubOctopus canvas
+    const wrap = document.getElementById("subCanvas");
+    if (wrap) wrap.innerHTML = "";
 
-function switchSubtitle(idx) {
-    activeSubIdx = idx;
-
-    // Hide all tracks
-    Object.values(subTrackMap).forEach(el => {
+    // Hide all native <track> elements
+    Object.values(nativeTrackMap).forEach(el => {
         if (el.track) el.track.mode = "hidden";
     });
+}
+
+async function switchSubtitle(idx) {
+    activeSubIdx = idx;
+    clearAllSubs();
 
     if (idx < 0 || !subTrackMap[idx]) {
         subVisible = false;
         return;
     }
 
-    const el = subTrackMap[idx];
+    const info = subTrackMap[idx];
+    subVisible = true;
 
-    function showTrack() {
-        if (el.track) {
-            el.track.mode = "showing";
-            subVisible = true;
+    // Show loading indicator
+    subNote.textContent = "Loading subtitle…";
+
+    try {
+        // Fetch the subtitle file — check X-Subtitle-Format header
+        const res = await fetch(info.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+        const fmt = (res.headers.get("X-Subtitle-Format") || "").toLowerCase()
+                  || (info.fmt || "").toLowerCase();
+        const isAss = fmt === "ass" || fmt === "ssa";
+
+        if (isAss) {
+            await renderASS(res, info);
+        } else {
+            // SRT converted to WebVTT by server — use native <track>
+            await renderVTT(info);
         }
+
+        subNote.textContent = `Showing: ${info.label}${info.lang ? " [" + info.lang + "]" : ""}`;
+
+    } catch(err) {
+        console.error("Subtitle switch failed:", err);
+        subNote.textContent = "⚠ Subtitle load failed — check console";
+        toast(`⚠ Subtitle error: ${err.message}`);
+        subVisible = false;
     }
-
-    // LOADED (2) = WebVTT already fetched and parsed, show immediately
-    if (el.readyState === 2) {
-        showTrack();
-        return;
-    }
-
-    // ERROR (3) = previous fetch failed, try fetching again with a fresh element
-    if (el.readyState === 3) {
-        vid.removeChild(el);
-        const fresh = document.createElement("track");
-        fresh.kind    = "subtitles";
-        fresh.label   = el.label;
-        fresh.srclang = el.srclang;
-        fresh.src     = el.src;
-        vid.appendChild(fresh);
-        subTrackMap[idx] = fresh;
-        fresh.addEventListener("load",  showTrack, { once: true });
-        fresh.addEventListener("error", () => toast("⚠ Subtitle load failed — check server logs"), { once: true });
-        return;
-    }
-
-    // NONE (0) or LOADING (1): browser hasn't fetched yet or is fetching.
-    // Nudge it by re-assigning src (required in some Chrome versions).
-    if (el.readyState === 0) {
-        const s = el.src; el.src = ""; el.src = s;
-    }
-
-    el.addEventListener("load",  showTrack, { once: true });
-    el.addEventListener("error", () => {
-        toast("⚠ Subtitle load failed — server returned an error");
-    }, { once: true });
-
-    // Hard fallback: if load event never fires within 8s, try showing anyway
-    // (Some browsers fire cuechange without firing load)
-    setTimeout(() => {
-        if (el.readyState === 2) showTrack();
-    }, 8000);
 }
 
-let subVisible = false;
+// ── ASS renderer via SubOctopus ──────────────────────────────────────────────
+async function renderASS(fetchResponse, info) {
+    await ensureOctopus();
+
+    const assText = await fetchResponse.text();
+
+    // SubOctopus needs the canvas container to match the video size exactly.
+    // We give it a div that overlaps the video via absolute positioning.
+    const wrap = document.getElementById("subCanvas");
+    wrap.innerHTML = "";  // clear previous canvas
+
+    // Pass the ASS content as a Blob URL so SubOctopus WASM can load it
+    const blob    = new Blob([assText], { type: "text/plain" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    octopusInstance = new window.SubtitlesOctopus({
+        video:      vid,
+        subUrl:     blobUrl,
+        workerUrl:  SUBOCTOPUS_WKR,
+        renderMode: "wasm-blend",   // best quality mode
+        targetFps:  24,
+        // Resize canvas when video resizes
+        onReady: () => {
+            URL.revokeObjectURL(blobUrl);
+            console.log("SubOctopus ready — ASS rendering active");
+        },
+        onError: (e) => {
+            console.error("SubOctopus error:", e);
+            toast("⚠ ASS renderer error — falling back to text");
+            URL.revokeObjectURL(blobUrl);
+        },
+    });
+
+    // Move the canvas SubOctopus creates into our overlay div
+    // SubOctopus appends its canvas to document.body by default;
+    // we intercept after a tick and reparent it
+    setTimeout(() => {
+        const octCanvas = document.querySelector(".libassjs-canvas-parent");
+        if (octCanvas && wrap) {
+            // Make it fill the player shell
+            octCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";
+            wrap.appendChild(octCanvas);
+        }
+    }, 200);
+}
+
+// ── WebVTT / SRT renderer via native <track> ─────────────────────────────────
+async function renderVTT(info) {
+    // Reuse cached native track element or create fresh one
+    let el = nativeTrackMap[info.index];
+    if (!el || !vid.contains(el)) {
+        el               = document.createElement("track");
+        el.kind          = "subtitles";
+        el.label         = info.label;
+        el.srclang       = info.lang || "und";
+        el.src           = info.url;
+        vid.appendChild(el);
+        nativeTrackMap[info.index] = el;
+    }
+
+    // Wait for the track to load then show it
+    await new Promise((resolve, reject) => {
+        if (el.readyState === 2) { resolve(); return; }
+        if (el.readyState === 3) {
+            // Error state — recreate
+            vid.removeChild(el);
+            el = document.createElement("track");
+            el.kind    = "subtitles";
+            el.label   = info.label;
+            el.srclang = info.lang || "und";
+            el.src     = info.url;
+            vid.appendChild(el);
+            nativeTrackMap[info.index] = el;
+        }
+        if (el.readyState === 0) {
+            const s = el.src; el.src = ""; el.src = s; // nudge Chrome
+        }
+        const onLoad  = () => resolve();
+        const onError = () => reject(new Error("Track load failed — server may have returned an error"));
+        el.addEventListener("load",  onLoad,  { once: true });
+        el.addEventListener("error", onError, { once: true });
+        setTimeout(resolve, 6000); // hard fallback
+    });
+
+    if (el.track) el.track.mode = "showing";
+}
+
+// Re-attach subtitle state after audio track switch reloads vid.src
+function reattachSubtitles() {
+    // Re-add any native track elements (they get wiped on vid.src change)
+    Object.entries(nativeTrackMap).forEach(([idx, el]) => {
+        if (!vid.contains(el)) {
+            const fresh = document.createElement("track");
+            fresh.kind    = "subtitles";
+            fresh.label   = el.label;
+            fresh.srclang = el.srclang;
+            fresh.src     = el.src;
+            vid.appendChild(fresh);
+            nativeTrackMap[idx] = fresh;
+        }
+    });
+    // Restore active subtitle
+    if (activeSubIdx >= 0) {
+        setTimeout(() => switchSubtitle(activeSubIdx), 300);
+    }
+}
 
 function toggleSubtitle() {
     if (subVisible || activeSubIdx >= 0) {
@@ -849,27 +968,31 @@ function toggleSubtitle() {
     }
 }
 
-// ── Debug helper: run diagnoseSubs() in browser console to test subtitle URLs ──
+// ── Debug helpers — run in browser DevTools console ──────────────────────────
 window.diagnoseSubs = async function() {
     console.group("Subtitle diagnosis");
-    for (const [idx, el] of Object.entries(subTrackMap)) {
-        console.log(`Track ${idx}: readyState=${el.readyState}, src=${el.src}`);
+    for (const [idx, info] of Object.entries(subTrackMap)) {
+        console.log(`Track ${idx}: fmt=${info.fmt} url=${info.url}`);
         try {
-            const r = await fetch(el.src);
+            const r = await fetch(info.url);
+            const fmt = r.headers.get("X-Subtitle-Format");
             const txt = await r.text();
-            console.log(`  → HTTP ${r.status}, ${txt.length} bytes, starts: ${txt.slice(0,80)}`);
+            console.log(`  → HTTP ${r.status}, X-Subtitle-Format=${fmt}, ${txt.length} bytes`);
+            console.log(`  → First 120 chars: ${txt.slice(0,120)}`);
         } catch(e) {
-            console.error(`  → fetch failed:`, e);
+            console.error("  → fetch failed:", e);
         }
     }
     console.groupEnd();
 };
 window.diagnoseTracks = function() {
-    console.group("Video textTracks");
+    console.group("Video textTracks (native)");
     Array.from(vid.textTracks).forEach((t,i) => {
-        console.log(`textTrack[${i}]: kind=${t.kind} label=${t.label} mode=${t.mode} cues=${t.cues ? t.cues.length : 'null'}`);
+        console.log(`textTrack[${i}]: kind=${t.kind} label=${t.label} mode=${t.mode} cues=${t.cues ? t.cues.length : "null"}`);
     });
     console.groupEnd();
+    console.log("SubOctopus instance:", octopusInstance);
+    console.log("Active sub idx:", activeSubIdx, "| subVisible:", subVisible);
 };
 
 // ════════════════════════════════════════════════════════════════════════════
