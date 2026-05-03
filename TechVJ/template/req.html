@@ -28,21 +28,134 @@
 
         .page { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; }
 
+        /* ═══════════════════════════════════════
+           VIDEO WRAPPER — fullscreen target
+           We fullscreen .video-wrap so the
+           overlay panel is visible in fullscreen
+        ═══════════════════════════════════════ */
         .video-wrap {
             position: relative; background: #000;
             border-radius: var(--radius); overflow: hidden;
             box-shadow: 0 20px 60px rgba(0,0,0,.8);
         }
-        video#player { width: 100%; max-height: 540px; display: block; background: #000; }
-        #subCanvas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-
-        ::cue {
-            font-family: 'Inter', Arial, sans-serif; font-size: 1.05em;
-            color: #fff; background: rgba(0,0,0,0.78);
-            border-radius: 3px; padding: 2px 6px; line-height: 1.5;
+        /* In fullscreen, fill the screen */
+        .video-wrap:fullscreen,
+        .video-wrap:-webkit-full-screen {
+            border-radius: 0;
+        }
+        video#player {
+            width: 100%; max-height: 540px; display: block; background: #000;
+        }
+        .video-wrap:fullscreen video#player,
+        .video-wrap:-webkit-full-screen video#player {
+            max-height: 100vh; height: 100vh;
         }
 
-        /* Panel — always visible, no JS toggle needed */
+        /* SubOctopus canvas overlay */
+        #subCanvas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+        /* ═══════════════════════════════════════
+           IN-PLAYER SETTINGS PANEL
+           Floats over the video, visible in
+           both normal and fullscreen mode.
+        ═══════════════════════════════════════ */
+        #settingsBtn {
+            position: absolute;
+            bottom: 52px; right: 10px;   /* above native controls bar */
+            z-index: 50;
+            background: rgba(0,0,0,0.65);
+            border: none; border-radius: 8px;
+            color: #fff; font-size: 1rem;
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; backdrop-filter: blur(4px);
+            transition: background .2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #settingsBtn:hover { background: rgba(168,85,247,0.7); }
+
+        #settingsPanel {
+            position: absolute;
+            bottom: 95px; right: 10px;
+            z-index: 100;
+            background: rgba(15,15,25,0.96);
+            border: 1px solid rgba(168,85,247,0.4);
+            border-radius: 12px;
+            padding: 14px 16px;
+            width: 270px;
+            max-width: calc(100vw - 20px);
+            backdrop-filter: blur(16px);
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+        }
+        #settingsPanel.open { display: flex; }
+
+        .sp-title {
+            font-size: .7rem; font-weight: 600; letter-spacing: 1px;
+            text-transform: uppercase; color: #a855f7;
+            border-bottom: 1px solid rgba(168,85,247,0.2);
+            padding-bottom: 8px; margin-bottom: 2px;
+        }
+        .sp-section { display: flex; flex-direction: column; gap: 8px; }
+        .sp-label { font-size: .72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .7px; }
+
+        /* Row for audio / subtitle selects */
+        .sp-select {
+            background: rgba(30,30,60,0.9); color: #e2e8f0;
+            border: 1px solid rgba(100,100,180,0.35); border-radius: 7px;
+            padding: 7px 10px; font-size: .82rem; cursor: pointer; outline: none;
+            font-family: 'Inter', sans-serif; width: 100%;
+        }
+        .sp-select:focus { border-color: #a855f7; }
+
+        /* Subtitle appearance controls */
+        .sp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+        /* Color swatches */
+        .swatch-wrap { display: flex; gap: 6px; flex-wrap: wrap; }
+        .swatch {
+            width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; transition: border-color .15s, transform .15s;
+            flex-shrink: 0;
+        }
+        .swatch.active, .swatch:hover { border-color: #fff; transform: scale(1.15); }
+
+        /* Toggle switch */
+        .toggle-wrap { display: flex; align-items: center; gap: 8px; font-size: .82rem; color: #cbd5e1; }
+        .toggle { position: relative; width: 38px; height: 21px; flex-shrink: 0; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; inset: 0;
+            background: #334155; border-radius: 21px; cursor: pointer;
+            transition: background .2s;
+        }
+        .toggle-slider:before {
+            content: ""; position: absolute;
+            width: 15px; height: 15px; border-radius: 50%;
+            background: #fff; top: 3px; left: 3px;
+            transition: transform .2s;
+        }
+        .toggle input:checked + .toggle-slider { background: #a855f7; }
+        .toggle input:checked + .toggle-slider:before { transform: translateX(17px); }
+
+        /* Font size slider */
+        .sp-slider {
+            width: 100%; accent-color: #a855f7; cursor: pointer;
+        }
+        .sp-slider-row { display: flex; align-items: center; gap: 8px; }
+        .sp-slider-val { font-size: .78rem; color: #94a3b8; min-width: 32px; text-align: right; }
+
+        /* ═══════════════════════════════════════
+           NATIVE ::cue STYLING
+           Updated dynamically by JS
+        ═══════════════════════════════════════ */
+        #cueStyle { /* injected dynamically */ }
+
+        /* ═══════════════════════════════════════
+           BELOW-VIDEO PANEL
+        ═══════════════════════════════════════ */
         .panel {
             background: var(--card); border: 1px solid var(--border);
             border-radius: var(--radius); padding: 18px 20px;
@@ -58,8 +171,7 @@
             background: #1a1a2e; color: var(--text);
             border: 1px solid var(--border); border-radius: 8px;
             padding: 8px 10px; font-size: .85rem; cursor: pointer; outline: none;
-            font-family: 'Inter', sans-serif; transition: border-color .2s;
-            width: 100%;
+            font-family: 'Inter', sans-serif; width: 100%;
         }
         .ctrl-group select:focus { border-color: var(--accent); }
         .ctrl-note { font-size: .72rem; color: var(--muted); min-height: 1em; }
@@ -85,7 +197,7 @@
             color: var(--text); font-size: .82rem;
             text-decoration: none; font-family: 'Inter', sans-serif;
             transition: background .2s, border-color .2s;
-            cursor: pointer; -webkit-tap-highlight-color: transparent;
+            -webkit-tap-highlight-color: transparent;
         }
         .ext-btn:hover, .ext-btn:active { background: #1e1e3a; border-color: var(--accent); }
         .ext-btn img { width: 24px; height: 24px; object-fit: contain; border-radius: 4px; }
@@ -97,15 +209,25 @@
             background: #1e1e3a; color: #eee; padding: 10px 20px;
             border-radius: 8px; font-size: .82rem; border: 1px solid var(--accent);
             z-index: 9999; display: none; text-align: center; max-width: 88vw;
-            box-shadow: 0 4px 20px rgba(0,0,0,.5);
         }
-
         footer {
             text-align: center; padding: 28px 16px;
             border-top: 1px solid var(--border); margin-top: 48px;
             font-size: .76rem; color: var(--muted);
         }
         footer a { color: var(--accent); text-decoration: none; }
+    </style>
+    <!-- Dynamic ::cue styles injected by JS into this tag -->
+    <style id="cueStyle">
+        ::cue {
+            font-family: 'Inter', Arial, sans-serif;
+            font-size: 1.05em;
+            color: #ffffff;
+            background: rgba(0,0,0,0.75);
+            border-radius: 3px;
+            padding: 2px 6px;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -120,28 +242,106 @@
 
 <div class="page">
 
-    <div class="video-wrap">
-        <video id="player" src="{{file_url}}" controls playsinline preload="metadata"
-               width="100%" style="max-height:540px;background:#000;"></video>
-        <div id="subCanvas"></div>
-    </div>
+    <!-- ═══════════════════════════════════════
+         VIDEO WRAP — fullscreen target
+    ═══════════════════════════════════════ -->
+    <div class="video-wrap" id="videoWrap">
 
-    <!-- Panel — always shown, no JS needed to make it visible -->
+        <video id="player"
+               src="{{file_url}}"
+               controls
+               playsinline
+               preload="metadata"
+               width="100%"
+               style="max-height:540px;background:#000;">
+        </video>
+
+        <div id="subCanvas"></div>
+
+        <!-- ⚙ In-player settings button — visible over the video -->
+        <button id="settingsBtn" title="Player settings" aria-label="Player settings">
+            <i class="fa fa-gear"></i>
+        </button>
+
+        <!-- Settings panel — shown on gear click, works in fullscreen -->
+        <div id="settingsPanel">
+            <div class="sp-title"><i class="fa fa-sliders"></i> Player Settings</div>
+
+            <!-- Audio track -->
+            <div class="sp-section">
+                <div class="sp-label">🔊 Audio Track</div>
+                <select class="sp-select" id="spAudioSel">
+                    <option value="-1">Detecting…</option>
+                </select>
+            </div>
+
+            <!-- Subtitle track -->
+            <div class="sp-section">
+                <div class="sp-label">💬 Subtitles</div>
+                <select class="sp-select" id="spSubSel">
+                    <option value="-1">Off</option>
+                </select>
+            </div>
+
+            <!-- Subtitle text colour -->
+            <div class="sp-section" id="subAppearSection">
+                <div class="sp-label">🎨 Subtitle Colour</div>
+                <div class="swatch-wrap" id="colorSwatches">
+                    <!-- built by JS -->
+                </div>
+            </div>
+
+            <!-- Subtitle background toggle -->
+            <div class="sp-section">
+                <div class="toggle-wrap">
+                    <label class="toggle">
+                        <input type="checkbox" id="bgToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    Subtitle background
+                </div>
+            </div>
+
+            <!-- Subtitle font size -->
+            <div class="sp-section">
+                <div class="sp-label">🔤 Subtitle Size</div>
+                <div class="sp-slider-row">
+                    <input type="range" class="sp-slider" id="sizeSlider" min="60" max="200" value="105" step="5">
+                    <span class="sp-slider-val" id="sizeVal">100%</span>
+                </div>
+            </div>
+
+            <!-- Playback speed -->
+            <div class="sp-section">
+                <div class="sp-label">⚡ Speed</div>
+                <select class="sp-select" id="spSpeedSel">
+                    <option value="0.25">0.25×</option>
+                    <option value="0.5">0.5×</option>
+                    <option value="0.75">0.75×</option>
+                    <option value="1" selected>1× Normal</option>
+                    <option value="1.25">1.25×</option>
+                    <option value="1.5">1.5×</option>
+                    <option value="1.75">1.75×</option>
+                    <option value="2">2×</option>
+                </select>
+            </div>
+
+        </div><!-- #settingsPanel -->
+
+    </div><!-- .video-wrap -->
+
+    <!-- Below-video panel (mirrors in-player panel for non-fullscreen ease) -->
     <div class="panel">
 
         <div class="ctrl-group">
             <label><i class="fa fa-music"></i> Audio Track</label>
-            <select id="audioSel">
-                <option value="-1">Detecting…</option>
-            </select>
+            <select id="audioSel"><option value="-1">Detecting…</option></select>
             <div class="ctrl-note" id="audioNote"></div>
         </div>
 
         <div class="ctrl-group">
             <label><i class="fa fa-closed-captioning"></i> Subtitles</label>
-            <select id="subSel">
-                <option value="-1">Off</option>
-            </select>
+            <select id="subSel"><option value="-1">Off</option></select>
             <div class="ctrl-note" id="subNote">Detecting…</div>
         </div>
 
@@ -170,9 +370,7 @@
     </div>
 
     <div class="section-label">Open in external player</div>
-    <div class="ext-btns" id="extBtns">
-        <!-- Buttons are built by JS so intent:// URLs can include the live FILE_URL -->
-    </div>
+    <div class="ext-btns" id="extBtns"></div>
 
 </div>
 
@@ -185,57 +383,158 @@
 <div id="toast"></div>
 
 <script>
-// ─────────────────────────────────────────────────────────────────────
-// Constants — injected by Jinja2
-// ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// Constants — Jinja2 injects these
+// ═══════════════════════════════════════════════════════
 const FILE_URL  = "{{file_url}}";
 const FILE_NAME = "{{file_name}}";
+const _u        = new URL(FILE_URL);
+const MSG_ID    = _u.pathname.split("/").filter(Boolean)[0];
+const HASH      = _u.searchParams.get("hash") || "";
+const BASE      = _u.origin;
 
-const _u      = new URL(FILE_URL);
-const MSG_ID  = _u.pathname.split("/").filter(Boolean)[0];
-const HASH    = _u.searchParams.get("hash") || "";
-const BASE    = _u.origin;
+// ═══════════════════════════════════════════════════════
+// DOM refs
+// ═══════════════════════════════════════════════════════
+const player     = document.getElementById("player");
+const videoWrap  = document.getElementById("videoWrap");
+const audioSel   = document.getElementById("audioSel");
+const audioNote  = document.getElementById("audioNote");
+const subSel     = document.getElementById("subSel");
+const subNote    = document.getElementById("subNote");
+const speedSel   = document.getElementById("speedSel");
+const spAudioSel = document.getElementById("spAudioSel");
+const spSubSel   = document.getElementById("spSubSel");
+const spSpeedSel = document.getElementById("spSpeedSel");
+const cueStyleEl = document.getElementById("cueStyle");
 
-const player  = document.getElementById("player");
-const audioSel= document.getElementById("audioSel");
-const audioNote=document.getElementById("audioNote");
-const subSel  = document.getElementById("subSel");
-const subNote = document.getElementById("subNote");
-const speedSel= document.getElementById("speedSel");
+// ═══════════════════════════════════════════════════════
+// Speed (both panels synced)
+// ═══════════════════════════════════════════════════════
+function setSpeed(v) {
+    player.playbackRate  = parseFloat(v);
+    speedSel.value       = v;
+    spSpeedSel.value     = v;
+}
+speedSel.onchange   = () => setSpeed(speedSel.value);
+spSpeedSel.onchange = () => setSpeed(spSpeedSel.value);
 
-// ─────────────────────────────────────────────────────────────────────
-// Speed (works immediately, no server needed)
-// ─────────────────────────────────────────────────────────────────────
-speedSel.onchange = () => { player.playbackRate = parseFloat(speedSel.value); };
+// ═══════════════════════════════════════════════════════
+// SUBTITLE APPEARANCE
+// ═══════════════════════════════════════════════════════
+const SUB_COLORS = [
+    { name: "White",       hex: "#ffffff" },
+    { name: "Yellow",      hex: "#fde047" },
+    { name: "Cyan",        hex: "#67e8f9" },
+    { name: "Green",       hex: "#86efac" },
+    { name: "Orange",      hex: "#fb923c" },
+    { name: "Pink",        hex: "#f9a8d4" },
+    { name: "Red",         hex: "#f87171" },
+    { name: "Light Blue",  hex: "#93c5fd" },
+];
 
-// ─────────────────────────────────────────────────────────────────────
-// External player buttons
-// Built in JS so the intent:// URL contains the correct FILE_URL
-// Using <a href="intent://..."> is the only reliable way to open
-// Android apps from Chrome — window.location.href triggers a
-// "Leave site?" dialog that users often dismiss.
-// ─────────────────────────────────────────────────────────────────────
-const enc     = encodeURIComponent(FILE_URL);
-const encName = encodeURIComponent(FILE_NAME);
+let subColor  = "#ffffff";
+let subBg     = true;
+let subSizePct= 105;
+
+function buildColorSwatches() {
+    const wrap = document.getElementById("colorSwatches");
+    SUB_COLORS.forEach(c => {
+        const s = document.createElement("div");
+        s.className   = "swatch" + (c.hex === subColor ? " active" : "");
+        s.style.background = c.hex;
+        s.title       = c.name;
+        s.onclick     = () => {
+            wrap.querySelectorAll(".swatch").forEach(x => x.classList.remove("active"));
+            s.classList.add("active");
+            subColor = c.hex;
+            applyCueStyle();
+        };
+        wrap.appendChild(s);
+    });
+}
+
+function applyCueStyle() {
+    const bg = subBg ? "rgba(0,0,0,0.75)" : "transparent";
+    const pad = subBg ? "2px 6px" : "0";
+    const size = (subSizePct / 100).toFixed(2) + "em";
+    cueStyleEl.textContent = `
+        ::cue {
+            font-family: 'Inter', Arial, sans-serif;
+            font-size: ${size};
+            color: ${subColor};
+            background: ${bg};
+            border-radius: ${subBg ? "3px" : "0"};
+            padding: ${pad};
+            line-height: 1.5;
+        }
+    `;
+}
+
+// Background toggle
+document.getElementById("bgToggle").onchange = function() {
+    subBg = this.checked;
+    applyCueStyle();
+};
+
+// Size slider
+const sizeSlider = document.getElementById("sizeSlider");
+const sizeVal    = document.getElementById("sizeVal");
+sizeSlider.oninput = () => {
+    subSizePct = parseInt(sizeSlider.value);
+    sizeVal.textContent = subSizePct + "%";
+    applyCueStyle();
+};
+
+buildColorSwatches();
+applyCueStyle();
+
+// ═══════════════════════════════════════════════════════
+// IN-PLAYER SETTINGS PANEL — gear button
+// Panel is inside .video-wrap so it's visible in fullscreen
+// ═══════════════════════════════════════════════════════
+const settingsBtn   = document.getElementById("settingsBtn");
+const settingsPanel = document.getElementById("settingsPanel");
+
+settingsBtn.onclick = (e) => {
+    e.stopPropagation();
+    settingsPanel.classList.toggle("open");
+};
+
+// Close panel when clicking outside of it
+document.addEventListener("click", (e) => {
+    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+        settingsPanel.classList.remove("open");
+    }
+});
+
+// Fullscreen: fullscreen the video-wrap so overlay stays visible
+player.addEventListener("dblclick", () => {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const el = videoWrap;
+        (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+    } else {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    }
+});
+
+// ═══════════════════════════════════════════════════════
+// EXTERNAL PLAYER BUTTONS
+// ═══════════════════════════════════════════════════════
+const encName   = encodeURIComponent(FILE_NAME);
 const isAndroid = /android/i.test(navigator.userAgent);
 const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
 function makeBtn(icon, label, href, extraClass) {
     const a = document.createElement("a");
     a.className = "ext-btn" + (extraClass ? " " + extraClass : "");
-    a.href = href;
-    // Open in new tab so the page isn't unloaded on desktop
-    // On Android, Chrome will intercept the intent:// and open the app
-    a.target = "_blank";
-    a.rel    = "noopener noreferrer";
+    a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
     if (typeof icon === "string" && icon.startsWith("http")) {
         const img = document.createElement("img");
         img.src = icon; img.alt = label;
         a.appendChild(img);
     } else {
-        const i = document.createElement("i");
-        i.className = icon;
-        a.appendChild(i);
+        const i = document.createElement("i"); i.className = icon; a.appendChild(i);
     }
     a.appendChild(document.createTextNode(" " + label));
     return a;
@@ -243,74 +542,29 @@ function makeBtn(icon, label, href, extraClass) {
 
 function buildExternalButtons() {
     const wrap = document.getElementById("extBtns");
-
     if (isAndroid) {
-        // ── Android: intent:// URLs — Chrome opens the app directly ──────
-        // MX Player (free)
-        wrap.appendChild(makeBtn(
-            "https://i.postimg.cc/sx4Msv4T/mx.png", "MX Player",
-            `intent:${FILE_URL}#Intent;package=com.mxtech.videoplayer.ad;` +
-            `S.title=${encName};S.artist=FileToLink;end`
-        ));
-        // VLC for Android
-        wrap.appendChild(makeBtn(
-            "https://i.postimg.cc/15TQ4y7B/vlc.png", "VLC",
-            `intent:${FILE_URL}#Intent;package=org.videolan.vlc;` +
-            `S.title=${encName};end`
-        ));
-        // PLAYit
-        wrap.appendChild(makeBtn(
-            "https://i.postimg.cc/RVGWYJFF/playit.png", "PLAYit",
-            `intent:${FILE_URL}#Intent;package=com.playit.videoplayer;` +
-            `S.title=${encName};end`
-        ));
-        // KM Player
-        wrap.appendChild(makeBtn(
-            "https://i.postimg.cc/wT9tFQ9Z/km.png", "KM Player",
-            `intent:${FILE_URL}#Intent;package=com.kmplayer;` +
-            `S.title=${encName};end`
-        ));
-        // nPlayer
-        wrap.appendChild(makeBtn(
-            "https://i.postimg.cc/XYJr6NGg/s.png", "nPlayer",
-            FILE_URL.replace(/^https?/, "nplayer-https")
-        ));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/sx4Msv4T/mx.png",     "MX Player", `intent:${FILE_URL}#Intent;package=com.mxtech.videoplayer.ad;S.title=${encName};end`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png",    "VLC",       `intent:${FILE_URL}#Intent;package=org.videolan.vlc;S.title=${encName};end`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/RVGWYJFF/playit.png", "PLAYit",    `intent:${FILE_URL}#Intent;package=com.playit.videoplayer;S.title=${encName};end`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/wT9tFQ9Z/km.png",     "KM Player", `intent:${FILE_URL}#Intent;package=com.kmplayer;S.title=${encName};end`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png",      "nPlayer",   FILE_URL.replace(/^https?/, "nplayer-https")));
     } else if (isIOS) {
-        // ── iOS: custom URL schemes ────────────────────────────────────
-        wrap.appendChild(makeBtn(
-            "https://i.postimg.cc/15TQ4y7B/vlc.png", "VLC",
-            `vlc-x-callback://x-callback-url/stream?url=${enc}`
-        ));
-        wrap.appendChild(makeBtn(
-            "https://i.postimg.cc/XYJr6NGg/s.png", "nPlayer",
-            FILE_URL.replace(/^https?/, "nplayer-https")
-        ));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png", "VLC",     `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(FILE_URL)}`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png",   "nPlayer", FILE_URL.replace(/^https?/, "nplayer-https")));
     } else {
-        // ── Desktop: vlc:// and copy-to-clipboard ──────────────────────
         const vlcBtn = makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png", "Open in VLC", `vlc://${FILE_URL}`);
-        vlcBtn.target = "_self";
-        wrap.appendChild(vlcBtn);
-
-        const copyBtn = makeBtn("fa fa-copy", "Copy URL", "#");
-        copyBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            navigator.clipboard?.writeText(FILE_URL)
-                .then(() => toast("URL copied! Paste it into your player."))
-                .catch(() => toast("Copy failed — select and copy manually:\n" + FILE_URL));
-        });
-        wrap.appendChild(copyBtn);
+        vlcBtn.target = "_self"; wrap.appendChild(vlcBtn);
+        const cpBtn = makeBtn("fa fa-copy", "Copy URL", "#");
+        cpBtn.addEventListener("click", e => { e.preventDefault(); navigator.clipboard?.writeText(FILE_URL).then(() => toast("URL copied!")).catch(() => toast("Copy failed")); });
+        wrap.appendChild(cpBtn);
     }
-
-    // Download button — always shown
     wrap.appendChild(makeBtn("fa fa-download", "Download", FILE_URL, "dl"));
 }
-
 buildExternalButtons();
 
-// ─────────────────────────────────────────────────────────────────────
-// Track info — load from /info/ endpoint
-// Panel is always visible; selects start with "Detecting…" / "Off"
-// ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// TRACK INFO — /info/ endpoint
+// ═══════════════════════════════════════════════════════
 let subTrackMap    = {};
 let nativeTrackMap = {};
 let activeSubIdx   = -1;
@@ -319,7 +573,6 @@ let _octWkr        = "";
 
 async function loadTrackInfo() {
     try {
-        // 20 second timeout — free-plan ffprobe can be slow
         const ctrl = new AbortController();
         const tid  = setTimeout(() => ctrl.abort(), 20000);
         const res  = await fetch(`${BASE}/info/${MSG_ID}?hash=${HASH}`, { signal: ctrl.signal });
@@ -329,44 +582,49 @@ async function loadTrackInfo() {
         buildAudioUI(data.audio    || []);
         buildSubUI(data.subtitles  || []);
     } catch(e) {
-        console.warn("Track info unavailable:", e.message);
-        // Fallback: show selects with default options
-        audioSel.innerHTML = '<option value="-1">Default (single track)</option>';
-        audioNote.textContent = "Could not detect tracks — server timeout";
-        subSel.innerHTML = '<option value="-1">Off</option>';
-        subNote.textContent = "Could not detect subtitles — server timeout";
+        console.warn("Track info:", e.message);
+        audioSel.innerHTML   = '<option value="-1">Default</option>';
+        spAudioSel.innerHTML = '<option value="-1">Default</option>';
+        audioNote.textContent = "Server timeout — single track assumed";
+        subSel.innerHTML   = '<option value="-1">Off</option>';
+        spSubSel.innerHTML = '<option value="-1">Off</option>';
+        subNote.textContent = "Subtitle info unavailable";
     }
 }
 
-loadTrackInfo();
-
-// ─────────────────────────────────────────────────────────────────────
-// Audio
-// ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════════
 function buildAudioUI(tracks) {
-    audioSel.innerHTML = "";
+    const mkOpts = (sel) => {
+        sel.innerHTML = "";
+        if (tracks.length <= 1) {
+            const label = tracks[0] ? (tracks[0].lang ? `${tracks[0].label} - ${tracks[0].lang}` : tracks[0].label) : "Default";
+            sel.innerHTML = `<option value="-1">${label}</option>`;
+        } else {
+            tracks.forEach((t, i) => {
+                const o = document.createElement("option");
+                o.value = t.index;
+                o.textContent = t.lang ? `${t.label} - ${t.lang}` : t.label;
+                if (i === 0) o.selected = true;
+                sel.appendChild(o);
+            });
+        }
+    };
+    mkOpts(audioSel);
+    mkOpts(spAudioSel);
+    audioNote.textContent = tracks.length <= 1 ? "Single audio track" : `${tracks.length} tracks — select to switch`;
 
-    if (tracks.length <= 1) {
-        const label = tracks[0] ? (tracks[0].lang ? `${tracks[0].label} - ${tracks[0].lang}` : tracks[0].label) : "Default";
-        audioSel.innerHTML = `<option value="-1">${label}</option>`;
-        audioNote.textContent = "Single audio track";
-        return;
-    }
-
-    tracks.forEach((t, i) => {
-        const o = document.createElement("option");
-        o.value = t.index;
-        o.textContent = t.lang ? `${t.label} - ${t.lang}` : t.label;
-        if (i === 0) o.selected = true;
-        audioSel.appendChild(o);
-    });
-    audioNote.textContent = `${tracks.length} tracks — select to switch`;
-    audioSel.onchange = () => switchAudio(parseInt(audioSel.value));
+    const onAudioChange = (v) => {
+        audioSel.value = v; spAudioSel.value = v;
+        switchAudio(parseInt(v));
+    };
+    audioSel.onchange   = () => onAudioChange(audioSel.value);
+    spAudioSel.onchange = () => onAudioChange(spAudioSel.value);
 }
 
 function switchAudio(idx) {
-    const t = player.currentTime;
-    const playing = !player.paused;
+    const t = player.currentTime, playing = !player.paused;
     player.src = idx < 0 ? FILE_URL : `${BASE}/audio/${MSG_ID}/${idx}?hash=${HASH}`;
     player.load();
     player.addEventListener("loadedmetadata", () => {
@@ -376,33 +634,31 @@ function switchAudio(idx) {
     }, { once: true });
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Subtitles
-// ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// SUBTITLES
+// ═══════════════════════════════════════════════════════
 function buildSubUI(tracks) {
-    subSel.innerHTML = '<option value="-1">Off</option>';
     subTrackMap = {};
+    const mkOpts = (sel) => {
+        sel.innerHTML = '<option value="-1">Off</option>';
+        tracks.forEach(t => {
+            const o = document.createElement("option");
+            o.value = t.index;
+            o.textContent = t.lang ? `${t.label} [${t.lang}]` : t.label;
+            sel.appendChild(o);
+            subTrackMap[t.index] = { url: `${BASE}/sub/${MSG_ID}/${t.index}?hash=${HASH}`, fmt: t.codec || "", label: t.label, lang: t.lang || "und" };
+        });
+    };
+    mkOpts(subSel);
+    mkOpts(spSubSel);
+    subNote.textContent = tracks.length === 0 ? "No subtitles in this file" : `${tracks.length} track${tracks.length > 1 ? "s" : ""} available`;
 
-    if (tracks.length === 0) {
-        subNote.textContent = "No subtitles in this file";
-        return;
-    }
-
-    tracks.forEach(t => {
-        const o = document.createElement("option");
-        o.value = t.index;
-        o.textContent = t.lang ? `${t.label} [${t.lang}]` : t.label;
-        subSel.appendChild(o);
-        subTrackMap[t.index] = {
-            url:   `${BASE}/sub/${MSG_ID}/${t.index}?hash=${HASH}`,
-            fmt:   t.codec || "",
-            label: t.label,
-            lang:  t.lang || "und",
-        };
-    });
-
-    subNote.textContent = `${tracks.length} track${tracks.length > 1 ? "s" : ""} available`;
-    subSel.onchange = () => switchSubtitle(parseInt(subSel.value));
+    const onSubChange = (v) => {
+        subSel.value = v; spSubSel.value = v;
+        switchSubtitle(parseInt(v));
+    };
+    subSel.onchange   = () => onSubChange(subSel.value);
+    spSubSel.onchange = () => onSubChange(spSubSel.value);
 }
 
 function clearSubs() {
@@ -414,130 +670,82 @@ function clearSubs() {
 async function switchSubtitle(idx) {
     activeSubIdx = idx;
     clearSubs();
-    if (idx < 0 || !subTrackMap[idx]) return;
+    subSel.value = idx; spSubSel.value = idx;
+    if (idx < 0 || !subTrackMap[idx]) { subNote.textContent = "Subtitles off"; return; }
 
     const info = subTrackMap[idx];
     subNote.textContent = "Loading…";
-
     try {
-        // HEAD request to check format header without downloading the body
-        // The <track> element fetches the URL itself — we just need to know
-        // the format to decide whether to also try SubOctopus
         const head = await fetch(info.url, { method: "HEAD" }).catch(() => null);
-        const fmt  = head
-            ? (head.headers.get("X-Subtitle-Format") || info.fmt || "").toLowerCase()
-            : (info.fmt || "").toLowerCase();
-
-        // showVTT uses the URL directly — no body fetch needed here
+        const fmt  = head ? (head.headers.get("X-Subtitle-Format") || info.fmt || "").toLowerCase() : (info.fmt || "").toLowerCase();
         await showVTT(info);
         subNote.textContent = `▶ ${info.label}${info.lang && info.lang !== "und" ? " ["+info.lang+"]" : ""}`;
-
-        // ASS source: try SubOctopus in background for richer rendering
         if (fmt === "ass" || fmt === "ssa") trySubOctopus(info);
-
     } catch(e) {
-        console.error("Subtitle failed:", e);
-        subNote.textContent = "⚠ Failed: " + e.message;
+        console.error("Subtitle error:", e);
+        subNote.textContent = "⚠ " + e.message;
     }
 }
 
 async function showVTT(info) {
-    // Remove previous track for this index
     const prev = nativeTrackMap[info.index];
-    if (prev && player.contains(prev)) {
-        player.removeChild(prev);
-        delete nativeTrackMap[info.index];
-    }
+    if (prev && player.contains(prev)) { player.removeChild(prev); delete nativeTrackMap[info.index]; }
 
-    // Use the server URL directly — it has CORS headers and correct Content-Type.
-    // Blob URLs are unreliable for <track> in Chrome (load event sometimes never fires,
-    // and blob: origins don't work with crossorigin="anonymous" on the video).
     const el = document.createElement("track");
-    el.kind     = "subtitles";
-    el.label    = info.label;
-    el.srclang  = info.lang || "und";
-    el.src      = info.url;   // direct /sub/ URL — server returns text/vtt; charset=utf-8
-    el.default  = false;
+    el.kind = "subtitles"; el.label = info.label;
+    el.srclang = info.lang || "und"; el.src = info.url; el.default = false;
     player.appendChild(el);
     nativeTrackMap[info.index] = el;
 
     await new Promise(resolve => {
-        // readyState 2 = LOADED
         if (el.readyState === 2) { resolve(); return; }
-
-        // readyState 3 = ERROR — re-create the element (Chrome quirk)
         if (el.readyState === 3) {
             player.removeChild(el);
             const el2 = document.createElement("track");
             el2.kind = "subtitles"; el2.label = info.label;
             el2.srclang = info.lang || "und"; el2.src = info.url + "&_r=" + Date.now();
-            player.appendChild(el2);
-            nativeTrackMap[info.index] = el2;
-            el2.addEventListener("load",  resolve, { once: true });
+            player.appendChild(el2); nativeTrackMap[info.index] = el2;
+            el2.addEventListener("load", resolve, { once: true });
             el2.addEventListener("error", resolve, { once: true });
-            setTimeout(resolve, 8000);
-            return;
+            setTimeout(resolve, 8000); return;
         }
-
-        el.addEventListener("load",  resolve, { once: true });
+        el.addEventListener("load", resolve, { once: true });
         el.addEventListener("error", resolve, { once: true });
         setTimeout(resolve, 8000);
     });
 
-    // Get the freshest reference (may have been replaced above)
+    Array.from(player.textTracks).forEach(t => { t.mode = "hidden"; });
     const active = nativeTrackMap[info.index];
-    if (active && active.track) {
-        // Hide all other tracks first
-        Array.from(player.textTracks).forEach(t => { t.mode = "hidden"; });
-        active.track.mode = "showing";
-    }
+    if (active?.track) active.track.mode = "showing";
 }
 
 async function trySubOctopus(info) {
     const cdns = [
-        { js: "https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus.js",
-          wk: "https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus-worker.js" },
-        { js: "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",
-          wk: "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
-        { js: "https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",
-          wk: "https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
+        { js: "https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus.js", wk: "https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus-worker.js" },
+        { js: "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",      wk: "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
+        { js: "https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",                  wk: "https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
     ];
-
     if (!window.SubtitlesOctopus) {
         for (const cdn of cdns) {
             try {
-                await new Promise((ok, fail) => {
-                    const s = document.createElement("script");
-                    s.src = cdn.js; s.onload = () => { _octWkr = cdn.wk; ok(); }; s.onerror = fail;
-                    document.head.appendChild(s);
-                });
+                await new Promise((ok, fail) => { const s = document.createElement("script"); s.src = cdn.js; s.onload = () => { _octWkr = cdn.wk; ok(); }; s.onerror = fail; document.head.appendChild(s); });
                 break;
             } catch(e) { console.warn("SubOctopus CDN failed:", cdn.js); }
         }
     }
-
-    if (!window.SubtitlesOctopus) return; // all CDNs failed — WebVTT already shown
-
+    if (!window.SubtitlesOctopus) return;
     try {
-        const res2 = await fetch(info.url);
-        if (!res2.ok) return;
+        const res2 = await fetch(info.url); if (!res2.ok) return;
         const txt2 = await res2.text();
         const blob = new Blob([txt2], { type: "text/plain" });
         const burl = URL.createObjectURL(blob);
         const wrap = document.getElementById("subCanvas");
         wrap.innerHTML = "";
-        Object.values(nativeTrackMap).forEach(el => { try { el.track.mode = "hidden"; } catch(e) {} });
-
+        Array.from(player.textTracks).forEach(t => { try { t.mode = "hidden"; } catch(e) {} });
         octopusInst = new window.SubtitlesOctopus({
-            video: player, subUrl: burl, workerUrl: _octWkr,
-            renderMode: "wasm-blend", targetFps: 24,
+            video: player, subUrl: burl, workerUrl: _octWkr, renderMode: "wasm-blend", targetFps: 24,
             onReady: () => URL.revokeObjectURL(burl),
-            onError: (e) => {
-                URL.revokeObjectURL(burl);
-                // Restore native track on error
-                Array.from(player.textTracks).forEach(t => { t.mode = "hidden"; });
-                if (nativeTrackMap[info.index]?.track) nativeTrackMap[info.index].track.mode = "showing";
-            },
+            onError: (e) => { URL.revokeObjectURL(burl); if (nativeTrackMap[info.index]?.track) nativeTrackMap[info.index].track.mode = "showing"; },
         });
         setTimeout(() => {
             const c = document.querySelector(".libassjs-canvas-parent");
@@ -546,9 +754,9 @@ async function trySubOctopus(info) {
     } catch(e) { console.warn("SubOctopus render failed:", e); }
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 // Toast
-// ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 let _tt;
 function toast(msg) {
     const el = document.getElementById("toast");
@@ -556,18 +764,10 @@ function toast(msg) {
     clearTimeout(_tt); _tt = setTimeout(() => el.style.display = "none", 5000);
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Debug
-// ─────────────────────────────────────────────────────────────────────
-window.dbg = async () => {
-    console.log("FILE_URL:", FILE_URL);
-    console.log("MSG_ID:", MSG_ID, "HASH:", HASH);
-    console.log("subTrackMap:", subTrackMap);
-    console.log("audioTracks:", player.audioTracks?.length);
-    console.log("textTracks:", player.textTracks?.length);
-    const r = await fetch(`${BASE}/info/${MSG_ID}?hash=${HASH}`).then(x => x.json()).catch(e => e);
-    console.log("/info/ response:", r);
-};
+// ═══════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════
+loadTrackInfo();
 </script>
 </body>
 </html>
