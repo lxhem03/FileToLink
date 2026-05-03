@@ -420,16 +420,19 @@ async function switchSubtitle(idx) {
     subNote.textContent = "Loading…";
 
     try {
-        const res = await fetch(info.url);
-        if (!res.ok) throw new Error(`Server error ${res.status}`);
-        const fmt = (res.headers.get("X-Subtitle-Format") || info.fmt || "").toLowerCase();
-        const body = await res.text();
+        // HEAD request to check format header without downloading the body
+        // The <track> element fetches the URL itself — we just need to know
+        // the format to decide whether to also try SubOctopus
+        const head = await fetch(info.url, { method: "HEAD" }).catch(() => null);
+        const fmt  = head
+            ? (head.headers.get("X-Subtitle-Format") || info.fmt || "").toLowerCase()
+            : (info.fmt || "").toLowerCase();
 
-        // Server always returns WebVTT body — show immediately
-        await showVTT(body, info);
-        subNote.textContent = `▶ ${info.label}${info.lang !== "und" ? " ["+info.lang+"]" : ""}`;
+        // showVTT uses the URL directly — no body fetch needed here
+        await showVTT(info);
+        subNote.textContent = `▶ ${info.label}${info.lang && info.lang !== "und" ? " ["+info.lang+"]" : ""}`;
 
-        // If source was ASS, try SubOctopus in background for richer rendering
+        // ASS source: try SubOctopus in background for richer rendering
         if (fmt === "ass" || fmt === "ssa") trySubOctopus(info);
 
     } catch(e) {
@@ -438,29 +441,56 @@ async function switchSubtitle(idx) {
     }
 }
 
-async function showVTT(vttText, info) {
-    const txt = vttText.trimStart().startsWith("WEBVTT") ? vttText : "WEBVTT\n\n" + vttText;
-    const blob = new Blob([txt], { type: "text/vtt" });
-    const url  = URL.createObjectURL(blob);
-
+async function showVTT(info) {
     // Remove previous track for this index
     const prev = nativeTrackMap[info.index];
-    if (prev && player.contains(prev)) player.removeChild(prev);
+    if (prev && player.contains(prev)) {
+        player.removeChild(prev);
+        delete nativeTrackMap[info.index];
+    }
 
+    // Use the server URL directly — it has CORS headers and correct Content-Type.
+    // Blob URLs are unreliable for <track> in Chrome (load event sometimes never fires,
+    // and blob: origins don't work with crossorigin="anonymous" on the video).
     const el = document.createElement("track");
-    el.kind = "subtitles"; el.label = info.label;
-    el.srclang = info.lang || "und"; el.src = url;
+    el.kind     = "subtitles";
+    el.label    = info.label;
+    el.srclang  = info.lang || "und";
+    el.src      = info.url;   // direct /sub/ URL — server returns text/vtt; charset=utf-8
+    el.default  = false;
     player.appendChild(el);
     nativeTrackMap[info.index] = el;
 
-    await new Promise(res => {
-        if (el.readyState === 2) { res(); return; }
-        el.addEventListener("load",  res, { once: true });
-        el.addEventListener("error", res, { once: true });
-        setTimeout(res, 5000);
+    await new Promise(resolve => {
+        // readyState 2 = LOADED
+        if (el.readyState === 2) { resolve(); return; }
+
+        // readyState 3 = ERROR — re-create the element (Chrome quirk)
+        if (el.readyState === 3) {
+            player.removeChild(el);
+            const el2 = document.createElement("track");
+            el2.kind = "subtitles"; el2.label = info.label;
+            el2.srclang = info.lang || "und"; el2.src = info.url + "&_r=" + Date.now();
+            player.appendChild(el2);
+            nativeTrackMap[info.index] = el2;
+            el2.addEventListener("load",  resolve, { once: true });
+            el2.addEventListener("error", resolve, { once: true });
+            setTimeout(resolve, 8000);
+            return;
+        }
+
+        el.addEventListener("load",  resolve, { once: true });
+        el.addEventListener("error", resolve, { once: true });
+        setTimeout(resolve, 8000);
     });
-    URL.revokeObjectURL(url);
-    if (el.track) el.track.mode = "showing";
+
+    // Get the freshest reference (may have been replaced above)
+    const active = nativeTrackMap[info.index];
+    if (active && active.track) {
+        // Hide all other tracks first
+        Array.from(player.textTracks).forEach(t => { t.mode = "hidden"; });
+        active.track.mode = "showing";
+    }
 }
 
 async function trySubOctopus(info) {
@@ -504,8 +534,9 @@ async function trySubOctopus(info) {
             onReady: () => URL.revokeObjectURL(burl),
             onError: (e) => {
                 URL.revokeObjectURL(burl);
-                if (nativeTrackMap[info.index]?.track)
-                    nativeTrackMap[info.index].track.mode = "showing";
+                // Restore native track on error
+                Array.from(player.textTracks).forEach(t => { t.mode = "hidden"; });
+                if (nativeTrackMap[info.index]?.track) nativeTrackMap[info.index].track.mode = "showing";
             },
         });
         setTimeout(() => {
