@@ -15,6 +15,71 @@ from TechVJ.util.render_template import render_page
 
 routes = web.RouteTableDef()
 
+def srt_to_webvtt(srt_bytes: bytes) -> bytes:
+    """
+    Convert SRT subtitle bytes to strict WebVTT bytes.
+    Guarantees:
+      - UTF-8 encoding (with BOM stripped)
+      - "WEBVTT" header on first line
+      - Timestamps use "." not "," for milliseconds  (Chrome requirement)
+      - Windows line endings normalised to Unix
+      - Blank lines between cues
+      - Sequence numbers removed (optional in WebVTT, cleaner without)
+    """
+    import re as _re
+
+    # Decode — try UTF-8 first, fall back to latin-1
+    try:
+        text = srt_bytes.decode("utf-8-sig")   # strips BOM if present
+    except UnicodeDecodeError:
+        text = srt_bytes.decode("latin-1")
+
+    # Normalise line endings
+    text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+    lines   = text.split("\n")
+    cues    = []
+    i       = 0
+    # SRT timestamp pattern: 00:00:00,000 --> 00:00:00,000
+    ts_pat  = _re.compile(
+        r"^(\d{1,2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{3})"
+    )
+    # ASS/SSA style tag cleaner (ffmpeg sometimes leaks these into SRT output)
+    tag_pat = _re.compile(r"\{[^}]*\}")
+
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Skip sequence numbers
+        if _re.match(r"^\d+$", line):
+            i += 1
+            continue
+
+        # Timestamp line
+        m = ts_pat.match(line)
+        if m:
+            start = m.group(1).replace(",", ".")   # comma → dot
+            end   = m.group(2).replace(",", ".")
+            i += 1
+            # Collect cue text lines until blank line or EOF
+            cue_lines = []
+            while i < len(lines) and lines[i].strip() != "":
+                cleaned = tag_pat.sub("", lines[i])   # strip {\an8} etc.
+                cue_lines.append(cleaned)
+                i += 1
+            if cue_lines:
+                cues.append(f"{start} --> {end}\n" + "\n".join(cue_lines))
+            continue
+
+        i += 1
+
+    webvtt = "WEBVTT\n\n" + "\n\n".join(cues)
+    if cues:
+        webvtt += "\n"
+
+    return webvtt.encode("utf-8")
+
+
 # Shared cache — same as original
 class_cache = {}
 
@@ -181,10 +246,17 @@ async def subtitle_handler(request: web.Request):
         cache_key = (id, track_index)
         if cache_key in _sub_cache:
             data, ctype, fmt = _sub_cache[cache_key]
-            return web.Response(body=data, content_type=ctype,
-                                headers={"Access-Control-Allow-Origin": "*",
-                                         "X-Subtitle-Format": fmt,
-                                         "Cache-Control": "public, max-age=86400"})
+            return web.Response(
+                body=data,
+                content_type="text/vtt",
+                charset="utf-8",
+                headers={
+                    "Access-Control-Allow-Origin":  "*",
+                    "Access-Control-Allow-Headers": "*",
+                    "X-Subtitle-Format":            fmt,
+                    "Cache-Control":                "public, max-age=86400",
+                }
+            )
 
         from urllib.parse import quote_plus
         file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
@@ -205,21 +277,23 @@ async def subtitle_handler(request: web.Request):
 
         is_ass = codec in ("ass", "ssa")
 
-        # Strategy: ALWAYS produce WebVTT as the guaranteed fallback.
-        # ffmpeg converts ASS→WebVTT (text + timing preserved, styling stripped).
-        # We send X-Subtitle-Format: ass when the source was ASS so the client
-        # can attempt SubOctopus for rich styling — but if SubOctopus fails
-        # (CDN blocked etc.) the client re-fetches with ?fmt=webvtt and uses
-        # the native <track> renderer which always works.
-        # We also cache the WebVTT version so the fallback is instant.
-
-        # Always extract as WebVTT
-        out_fmt = "webvtt"
-        ctype   = "text/vtt"
+        # Step 1: Extract as SRT first (most compatible ffmpeg output)
+        # SRT is simpler and ffmpeg rarely garbles it.
+        # Step 2: We convert SRT→WebVTT in Python to guarantee:
+        #   - Correct "WEBVTT" header on line 1
+        #   - Timestamps use "." not "," for milliseconds
+        #   - File is valid UTF-8
+        #   - No BOM, no Windows line endings
+        # This fixes Chrome silently rejecting malformed WebVTT.
 
         cmd = [
-            "ffmpeg", "-nostdin", "-probesize", "50M", "-analyzeduration", "0",
-            "-i", file_url, "-map", f"0:s:{track_index}", "-f", "webvtt", "pipe:1"
+            "ffmpeg", "-nostdin",
+            "-probesize", "50M",
+            "-analyzeduration", "0",
+            "-i", file_url,
+            "-map", f"0:s:{track_index}",
+            "-f", "srt",        # extract as SRT — more reliable than webvtt from ffmpeg
+            "pipe:1"
         ]
         proc = await asyncio.create_subprocess_exec(*cmd,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -232,15 +306,29 @@ async def subtitle_handler(request: web.Request):
         if proc.returncode != 0 or not stdout:
             err = stderr.decode(errors="replace")[:400]
             logging.warning(f"ffmpeg sub failed id={id} track={track_index}: {err}")
-            raise web.HTTPNotFound(text=f"Subtitle failed: {err[:150]}")
+            raise web.HTTPNotFound(text=f"Subtitle extraction failed: {err[:150]}")
 
-        # Store with original codec so client knows source format, but body is always WebVTT
-        _sub_cache[cache_key] = (stdout, ctype, 'ass' if is_ass else 'webvtt')
+        # Step 2: Convert SRT bytes → strict WebVTT string in Python
+        webvtt_bytes = srt_to_webvtt(stdout)
+
+        ctype = "text/vtt; charset=utf-8"
+        fmt   = "ass" if is_ass else "webvtt"
+
+        _sub_cache[cache_key]       = (webvtt_bytes, ctype, fmt)
         _sub_codec_cache[cache_key] = codec
-        return web.Response(body=stdout, content_type=ctype,
-                            headers={"Access-Control-Allow-Origin": "*",
-                                     "X-Subtitle-Format": out_fmt,
-                                     "Cache-Control": "public, max-age=86400"})
+        logging.info(f"Subtitle ready id={id} track={track_index} codec={codec} size={len(webvtt_bytes)}B")
+
+        return web.Response(
+            body=webvtt_bytes,
+            content_type="text/vtt",
+            charset="utf-8",
+            headers={
+                "Access-Control-Allow-Origin":  "*",
+                "Access-Control-Allow-Headers": "*",
+                "X-Subtitle-Format":            fmt,
+                "Cache-Control":                "public, max-age=86400",
+            }
+        )
     except (web.HTTPForbidden, web.HTTPNotFound, web.HTTPGatewayTimeout):
         raise
     except InvalidHash:
