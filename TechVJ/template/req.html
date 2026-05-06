@@ -38,17 +38,14 @@
             border-radius: var(--radius); overflow: hidden;
             box-shadow: 0 20px 60px rgba(0,0,0,.8);
         }
-        /* In fullscreen, fill the screen */
-        .video-wrap:fullscreen,
-        .video-wrap:-webkit-full-screen {
-            border-radius: 0;
-        }
         video#player {
             width: 100%; max-height: 540px; display: block; background: #000;
         }
-        .video-wrap:fullscreen video#player,
-        .video-wrap:-webkit-full-screen video#player {
-            max-height: 100vh; height: 100vh;
+        /* Native fullscreen via player.requestFullscreen() —
+           the fixed #settingsBtn and #settingsPanel are always on top via z-index */
+        video#player:fullscreen,
+        video#player:-webkit-full-screen {
+            max-height: 100vh;
         }
 
         /* SubOctopus canvas overlay */
@@ -59,37 +56,54 @@
            Floats over the video, visible in
            both normal and fullscreen mode.
         ═══════════════════════════════════════ */
+        /* ── Settings button: fixed so it survives any fullscreen mode ── */
         #settingsBtn {
-            position: absolute;
-            bottom: 52px; right: 10px;   /* above native controls bar */
-            z-index: 50;
-            background: rgba(0,0,0,0.65);
+            position: fixed;
+            bottom: 72px; right: 12px;
+            z-index: 2147483647;          /* max z-index — always on top */
+            background: rgba(0,0,0,0.72);
             border: none; border-radius: 8px;
             color: #fff; font-size: 1rem;
-            width: 36px; height: 36px;
+            width: 40px; height: 40px;
             display: flex; align-items: center; justify-content: center;
-            cursor: pointer; backdrop-filter: blur(4px);
-            transition: background .2s;
+            cursor: pointer; backdrop-filter: blur(6px);
+            transition: background .2s, opacity .2s;
             -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.5);
         }
-        #settingsBtn:hover { background: rgba(168,85,247,0.7); }
+        #settingsBtn:hover,
+        #settingsBtn:active { background: rgba(168,85,247,0.85); }
 
+        /* Hide the button when the native video controls are not near
+           (user is just watching) — show on tap/hover of video area */
+        /* We always show it for simplicity on mobile */
+
+        /* ── Settings panel: fixed so it works in ALL fullscreen modes ── */
         #settingsPanel {
-            position: absolute;
-            bottom: 95px; right: 10px;
-            z-index: 100;
-            background: rgba(15,15,25,0.96);
-            border: 1px solid rgba(168,85,247,0.4);
-            border-radius: 12px;
+            position: fixed;
+            bottom: 120px; right: 12px;
+            z-index: 2147483646;
+            background: rgba(12,12,22,0.97);
+            border: 1px solid rgba(168,85,247,0.45);
+            border-radius: 14px;
             padding: 14px 16px;
-            width: 270px;
-            max-width: calc(100vw - 20px);
-            backdrop-filter: blur(16px);
+            width: 278px;
+            max-width: calc(100vw - 24px);
+            /* Fix 2: scrollable panel */
+            max-height: calc(100vh - 140px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            backdrop-filter: blur(18px);
             display: none;
             flex-direction: column;
             gap: 14px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+            box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+            scrollbar-width: thin;
+            scrollbar-color: rgba(168,85,247,0.4) transparent;
         }
+        #settingsPanel::-webkit-scrollbar { width: 4px; }
+        #settingsPanel::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.4); border-radius: 4px; }
+        #settingsPanel::-webkit-scrollbar-track { background: transparent; }
         #settingsPanel.open { display: flex; }
 
         .sp-title {
@@ -508,15 +522,29 @@ document.addEventListener("click", (e) => {
     }
 });
 
-// Fullscreen: fullscreen the video-wrap so overlay stays visible
+// Fullscreen: use the player element directly so native controls remain visible.
+// The #settingsBtn and #settingsPanel use position:fixed with max z-index,
+// so they float above the fullscreen video regardless.
 player.addEventListener("dblclick", () => {
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        const el = videoWrap;
-        (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+        const req = player.requestFullscreen || player.webkitRequestFullscreen;
+        if (req) req.call(player);
     } else {
-        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
     }
 });
+
+// Reposition settings panel when entering/exiting fullscreen
+// so it doesn't overlap the native fullscreen controls bar
+function onFullscreenChange() {
+    const inFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    // In fullscreen: move panel higher so it clears the controls bar
+    settingsBtn.style.bottom   = inFS ? "80px"  : "72px";
+    settingsPanel.style.bottom = inFS ? "130px" : "120px";
+}
+document.addEventListener("fullscreenchange",       onFullscreenChange);
+document.addEventListener("webkitfullscreenchange", onFullscreenChange);
 
 // ═══════════════════════════════════════════════════════
 // EXTERNAL PLAYER BUTTONS
