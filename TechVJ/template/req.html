@@ -19,7 +19,9 @@
             position: sticky; top: 0; z-index: 200;
             display: flex; align-items: center; justify-content: space-between;
             padding: 12px 24px;
-            background: rgba(10,10,15,0.97); backdrop-filter: blur(12px);
+            /* No backdrop-filter here — it creates a new stacking context
+               that breaks position:fixed on child elements */
+            background: rgba(10,10,15,0.99);
             border-bottom: 1px solid var(--border);
         }
         .nav-brand { font-size: 1.1rem; font-weight: 600; color: var(--accent); }
@@ -56,44 +58,36 @@
            Floats over the video, visible in
            both normal and fullscreen mode.
         ═══════════════════════════════════════ */
-        /* ── Settings button: fixed so it survives any fullscreen mode ── */
+        /* Settings button — appended to <body> by JS, positioned by JS */
         #settingsBtn {
             position: fixed;
-            bottom: 72px; right: 12px;
-            z-index: 2147483647;          /* max z-index — always on top */
+            z-index: 99999;
             background: rgba(0,0,0,0.72);
             border: none; border-radius: 8px;
             color: #fff; font-size: 1rem;
             width: 40px; height: 40px;
             display: flex; align-items: center; justify-content: center;
-            cursor: pointer; backdrop-filter: blur(6px);
-            transition: background .2s, opacity .2s;
+            cursor: pointer;
+            transition: background .2s;
             -webkit-tap-highlight-color: transparent;
             box-shadow: 0 2px 12px rgba(0,0,0,0.5);
         }
         #settingsBtn:hover,
         #settingsBtn:active { background: rgba(168,85,247,0.85); }
 
-        /* Hide the button when the native video controls are not near
-           (user is just watching) — show on tap/hover of video area */
-        /* We always show it for simplicity on mobile */
-
-        /* ── Settings panel: fixed so it works in ALL fullscreen modes ── */
+        /* Settings panel — appended to <body> by JS, positioned by JS */
         #settingsPanel {
             position: fixed;
-            bottom: 120px; right: 12px;
-            z-index: 2147483646;
+            z-index: 99998;
             background: rgba(12,12,22,0.97);
             border: 1px solid rgba(168,85,247,0.45);
             border-radius: 14px;
             padding: 14px 16px;
             width: 278px;
             max-width: calc(100vw - 24px);
-            /* Fix 2: scrollable panel */
-            max-height: calc(100vh - 140px);
+            max-height: 70vh;
             overflow-y: auto;
             overflow-x: hidden;
-            backdrop-filter: blur(18px);
             display: none;
             flex-direction: column;
             gap: 14px;
@@ -272,12 +266,8 @@
 
         <div id="subCanvas"></div>
 
-        <!-- ⚙ In-player settings button — visible over the video -->
-        <button id="settingsBtn" title="Player settings" aria-label="Player settings">
-            <i class="fa fa-gear"></i>
-        </button>
-
-        <!-- Settings panel — shown on gear click, works in fullscreen -->
+        <!-- settingsBtn and settingsPanel are in <body> directly (appended by JS)
+             so backdrop-filter on ancestors cannot break position:fixed -->
         <div id="settingsPanel">
             <div class="sp-title"><i class="fa fa-sliders"></i> Player Settings</div>
 
@@ -505,26 +495,83 @@ applyCueStyle();
 
 // ═══════════════════════════════════════════════════════
 // IN-PLAYER SETTINGS PANEL — gear button
-// Panel is inside .video-wrap so it's visible in fullscreen
+//
+// The button and panel are moved to document.body via JS.
+// This bypasses stacking-context breakage caused by any
+// ancestor with backdrop-filter, transform, or filter.
+// Positioning is done via getBoundingClientRect so the
+// button always sits at the bottom-right of the video.
 // ═══════════════════════════════════════════════════════
 const settingsBtn   = document.getElementById("settingsBtn");
 const settingsPanel = document.getElementById("settingsPanel");
 
+// Move both directly into <body> — out of any transformed ancestor
+document.body.appendChild(settingsBtn);
+document.body.appendChild(settingsPanel);
+
+function positionBtn() {
+    const inFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (inFS) {
+        // Fullscreen: pin to bottom-right of viewport, above native controls
+        settingsBtn.style.cssText += ";right:12px;bottom:80px;top:auto;left:auto;";
+    } else {
+        // Normal: anchor to bottom-right corner of the video element
+        const r = player.getBoundingClientRect();
+        const scrollY = window.scrollY || window.pageYOffset;
+        settingsBtn.style.top    = (r.bottom - 48 + scrollY) + "px";
+        settingsBtn.style.left   = (r.right  - 50) + "px";
+        settingsBtn.style.right  = "auto";
+        settingsBtn.style.bottom = "auto";
+    }
+}
+
+function positionPanel() {
+    const btnR   = settingsBtn.getBoundingClientRect();
+    const panW   = 278;
+    const margin = 8;
+
+    // Horizontal: right-align with button
+    let rightEdge = window.innerWidth - btnR.right;
+    if (rightEdge < margin) rightEdge = margin;
+    settingsPanel.style.right = rightEdge + "px";
+    settingsPanel.style.left  = "auto";
+
+    // Vertical: prefer above button, fall back to below
+    const spaceAbove = btnR.top - margin;
+    const maxH       = Math.min(window.innerHeight * 0.70, 480);
+    if (spaceAbove >= 180) {
+        settingsPanel.style.bottom = (window.innerHeight - btnR.top + 6) + "px";
+        settingsPanel.style.top    = "auto";
+    } else {
+        settingsPanel.style.top    = (btnR.bottom + 6) + "px";
+        settingsPanel.style.bottom = "auto";
+    }
+}
+
 settingsBtn.onclick = (e) => {
     e.stopPropagation();
+    const opening = !settingsPanel.classList.contains("open");
     settingsPanel.classList.toggle("open");
+    if (opening) positionPanel();
 };
 
-// Close panel when clicking outside of it
 document.addEventListener("click", (e) => {
     if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
         settingsPanel.classList.remove("open");
     }
 });
 
-// Fullscreen: use the player element directly so native controls remain visible.
-// The #settingsBtn and #settingsPanel use position:fixed with max z-index,
-// so they float above the fullscreen video regardless.
+// Reposition on scroll / resize
+window.addEventListener("scroll",  () => {
+    positionBtn();
+    if (settingsPanel.classList.contains("open")) positionPanel();
+}, { passive: true });
+window.addEventListener("resize",  () => {
+    positionBtn();
+    if (settingsPanel.classList.contains("open")) positionPanel();
+});
+
+// Fullscreen toggle on double-tap
 player.addEventListener("dblclick", () => {
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
         const req = player.requestFullscreen || player.webkitRequestFullscreen;
@@ -535,16 +582,16 @@ player.addEventListener("dblclick", () => {
     }
 });
 
-// Reposition settings panel when entering/exiting fullscreen
-// so it doesn't overlap the native fullscreen controls bar
 function onFullscreenChange() {
-    const inFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
-    // In fullscreen: move panel higher so it clears the controls bar
-    settingsBtn.style.bottom   = inFS ? "80px"  : "72px";
-    settingsPanel.style.bottom = inFS ? "130px" : "120px";
+    positionBtn();
+    if (settingsPanel.classList.contains("open")) positionPanel();
 }
 document.addEventListener("fullscreenchange",       onFullscreenChange);
 document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+// Initial position after layout
+requestAnimationFrame(positionBtn);
+player.addEventListener("loadedmetadata", positionBtn);
 
 // ═══════════════════════════════════════════════════════
 // EXTERNAL PLAYER BUTTONS
