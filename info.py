@@ -5,9 +5,9 @@ id_pattern = re.compile(r'^.\d+$')
 
 # Bot information
 SESSION = environ.get('SESSION', 'F2L')
-API_ID = int(environ.get('API_ID', ''))
-API_HASH = environ.get('API_HASH', '')
-BOT_TOKEN = environ.get('BOT_TOKEN', "")
+API_ID = int(environ.get('API_ID', '39545686'))
+API_HASH = environ.get('API_HASH', '0ed4ebf411d1dc0fc63b821a08ad889b')
+BOT_TOKEN = environ.get('BOT_TOKEN', "8606725962:AAGdrHHPMGLkET4blKtbDvD3UIs60PplRjE")
 
 # Bot settings
 PORT = environ.get("PORT", "8080")
@@ -20,15 +20,15 @@ if 'DYNO' in environ:
     ON_HEROKU = True
 else:
     ON_HEROKU = False
-URL = environ.get("URL", "")
+URL = environ.get("URL", "https://given-maura-telegram-guys-c4d2e66b.koyeb.app/")
 START_IMG = environ.get("START_IMG", "https://files.catbox.moe/lllex3.jpg")
 
 # Admins, Channels & Users
-LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-1002458319512'))
+LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-1002288135729'))
 ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ.get('ADMINS', '1705634892').split()]
 
 # MongoDB information
-DATABASE_URI = environ.get('DATABASE_URI', "")
+DATABASE_URI = environ.get('DATABASE_URI', "mongodb+srv://itzmikeyhere21:oa9L3ts4reFl3uWH@demonstration.a1im111.mongodb.net/?appName=demonstration")
 DATABASE_NAME = environ.get('DATABASE_NAME', "FileXstreamerobot")
 
 # Shortlink Info
