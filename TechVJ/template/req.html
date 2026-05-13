@@ -638,8 +638,7 @@ buildExternalButtons();
 
 // ── Track info ────────────────────────────────────────────────────────
 let subTrackMap={}, nativeTrackMap={}, activeSubIdx=-1, octopusInst=null, _octWkr="";
-let activeAudioIdx = -1;     // tracks which audio track is selected
-let audioSrcMode   = false;  // true = we switched src to /audio/ endpoint
+let activeAudioIdx = -1;  // tracks which audio track is selected
 
 async function loadTrackInfo(){
     try{
@@ -674,55 +673,77 @@ function buildAudioUI(tracks){
     }
     mkOpts(audioSel); mkOpts(spAudioSel);
     audioNote.textContent=tracks.length<=1?"Single audio track":`${tracks.length} tracks — select to switch`;
-    const onChange=v=>{audioSel.value=spAudioSel.value=v; switchAudio(parseInt(v));};
+    const onChange=v=>{
+        const idx = parseInt(v);
+        audioSel.value=spAudioSel.value=v;
+        activeAudioIdx = idx;
+        const ok = applyAudioTrack(idx);
+        if (!ok) audioNote.textContent = "Switching… (tracks not loaded yet)";
+        else audioNote.textContent = `Track ${idx < 0 ? 1 : idx + 1} active`;
+    };
     audioSel.onchange=()=>onChange(audioSel.value); spAudioSel.onchange=()=>onChange(spAudioSel.value);
 }
-function audioUrl(idx, startSec) {
-    if (idx < 0) return FILE_URL;
-    let url = `${BASE}/audio/${MSG_ID}/${idx}?hash=${HASH}`;
-    if (startSec && startSec > 0) url += `&start=${startSec.toFixed(2)}`;
-    return url;
+// ── Audio track switching ─────────────────────────────────────────────
+// We ONLY use HTMLMediaElement.audioTracks — no src switching.
+// Src switching breaks seekability because the /audio/ endpoint is a
+// live ffmpeg pipe with no Content-Length and no Range support.
+//
+// audioTracks is populated by Chrome/Edge after the video starts loading.
+// We poll for it until tracks appear, then wire up the selector.
+// The selector shows "Detecting…" until tracks are confirmed.
+
+let _audioTracksWired = false;
+
+function applyAudioTrack(idx) {
+    if (!vid.audioTracks || vid.audioTracks.length === 0) return false;
+    Array.from(vid.audioTracks).forEach((t, i) => {
+        t.enabled = (idx < 0) ? (i === 0) : (i === idx);
+    });
+    return true;
 }
 
-function switchAudio(idx){
+function switchAudio(idx) {
     activeAudioIdx = idx;
+    const ok = applyAudioTrack(idx);
+    if (!ok) {
+        // Tracks not loaded yet — will be applied when they appear
+        audioNote.textContent = "Switching… (waiting for tracks)";
+    }
+}
 
-    // Strategy 1: Browser native AudioTrackList API.
-    // No src change — full seekability preserved.
-    if (vid.audioTracks && vid.audioTracks.length > 1) {
-        audioSrcMode = false;
-        Array.from(vid.audioTracks).forEach((t, i) => {
-            t.enabled = (idx < 0) ? (i === 0) : (i === idx);
-        });
+// Poll until audioTracks are available, then sync selector with reality
+function pollAudioTracks() {
+    const tracks = vid.audioTracks;
+    if (!tracks || tracks.length === 0) {
+        setTimeout(pollAudioTracks, 500);
         return;
     }
+    if (_audioTracksWired) return;
+    _audioTracksWired = true;
 
-    // Strategy 2: Switch src to /audio/ endpoint (with seek offset).
-    audioSrcMode = true;
-    const t = vid.currentTime, playing = !vid.paused;
-    vid.src = audioUrl(idx, t);
-    vid.load();
-    vid.addEventListener("loadedmetadata", () => {
-        if (playing) vid.play().catch(() => {});
-        if (activeSubIdx >= 0) setTimeout(() => switchSubtitle(activeSubIdx), 400);
-    }, { once: true });
+    // If we already have ffprobe data, selectors are built — just apply
+    if (activeAudioIdx >= 0) {
+        applyAudioTrack(activeAudioIdx);
+    }
+
+    // If selectors still show "Detecting…", build from live audioTracks
+    if (audioSel.options.length === 1 && audioSel.options[0].value === "-1" &&
+        audioSel.options[0].text === "Detecting…") {
+        const trackList = Array.from(tracks).map((t, i) => ({
+            index: i,
+            label: t.label || `Audio ${i + 1}`,
+            lang:  t.language || "",
+        }));
+        buildAudioUI(trackList);
+    }
+
+    audioNote.textContent = `${tracks.length} track${tracks.length > 1 ? "s" : ""} — select to switch`;
 }
 
-// When user seeks while in audio src-switch mode, reload from new position
-// so the stream starts at the right point (ffmpeg -ss seek on server)
-vid.addEventListener("seeking", () => {
-    if (!audioSrcMode || activeAudioIdx < 0) return;
-    // Don't react to seeks triggered by our own src change
-    const targetTime = vid.currentTime;
-    const playing    = !vid.paused;
-    const newSrc     = audioUrl(activeAudioIdx, targetTime);
-    if (vid.src === newSrc) return;
-    vid.src = newSrc;
-    vid.load();
-    vid.addEventListener("loadedmetadata", () => {
-        if (playing) vid.play().catch(() => {});
-    }, { once: true });
-});
+// Start polling as soon as video begins loading
+vid.addEventListener("loadstart",     pollAudioTracks);
+vid.addEventListener("loadedmetadata",pollAudioTracks);
+vid.addEventListener("canplay",       pollAudioTracks);
 
 // ── Subtitles ─────────────────────────────────────────────────────────
 function buildSubUI(tracks){
