@@ -19,9 +19,7 @@
             position: sticky; top: 0; z-index: 200;
             display: flex; align-items: center; justify-content: space-between;
             padding: 12px 24px;
-            /* No backdrop-filter here — it creates a new stacking context
-               that breaks position:fixed on child elements */
-            background: rgba(10,10,15,0.99);
+            background: #0c0c16;
             border-bottom: 1px solid var(--border);
         }
         .nav-brand { font-size: 1.1rem; font-weight: 600; color: var(--accent); }
@@ -30,140 +28,110 @@
 
         .page { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; }
 
-        /* ═══════════════════════════════════════
-           VIDEO WRAPPER — fullscreen target
-           We fullscreen .video-wrap so the
-           overlay panel is visible in fullscreen
-        ═══════════════════════════════════════ */
+        /* ── Video wrapper ── */
         .video-wrap {
-            position: relative; background: #000;
-            border-radius: var(--radius); overflow: hidden;
+            position: relative;
+            background: #000;
+            border-radius: var(--radius);
+            overflow: hidden;
             box-shadow: 0 20px 60px rgba(0,0,0,.8);
         }
         video#player {
             width: 100%; max-height: 540px; display: block; background: #000;
         }
-        /* Native fullscreen via player.requestFullscreen() —
-           the fixed #settingsBtn and #settingsPanel are always on top via z-index */
-        video#player:fullscreen,
-        video#player:-webkit-full-screen {
-            max-height: 100vh;
-        }
-
-        /* SubOctopus canvas overlay */
         #subCanvas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 
-        /* ═══════════════════════════════════════
-           IN-PLAYER SETTINGS PANEL
-           Floats over the video, visible in
-           both normal and fullscreen mode.
-        ═══════════════════════════════════════ */
-        /* Settings button — appended to <body> by JS, positioned by JS */
+        /* ── Settings gear button — sits inside .video-wrap ── */
         #settingsBtn {
-            position: fixed;
-            z-index: 99999;
-            background: rgba(0,0,0,0.72);
-            border: none; border-radius: 8px;
-            color: #fff; font-size: 1rem;
-            width: 40px; height: 40px;
+            position: absolute;
+            bottom: 50px; right: 8px;      /* above the native controls bar */
+            z-index: 10;
+            background: rgba(0,0,0,0.60);
+            border: none; border-radius: 7px;
+            color: #fff; font-size: .95rem;
+            width: 36px; height: 36px;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer;
-            transition: background .2s;
+            transition: background .18s;
             -webkit-tap-highlight-color: transparent;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.5);
         }
         #settingsBtn:hover,
-        #settingsBtn:active { background: rgba(168,85,247,0.85); }
+        #settingsBtn:active { background: rgba(168,85,247,0.8); }
 
-        /* Settings panel — appended to <body> by JS, positioned by JS */
+        /* ── Settings panel — anchored inside .video-wrap ── */
         #settingsPanel {
-            position: fixed;
-            z-index: 99998;
-            background: rgba(12,12,22,0.97);
-            border: 1px solid rgba(168,85,247,0.45);
-            border-radius: 14px;
-            padding: 14px 16px;
-            width: 278px;
-            max-width: calc(100vw - 24px);
-            max-height: 70vh;
+            position: absolute;
+            bottom: 92px; right: 8px;
+            z-index: 20;
+            background: rgba(10,10,20,0.97);
+            border: 1px solid rgba(168,85,247,0.4);
+            border-radius: 12px;
+            padding: 12px 14px;
+            width: 264px;
+            max-width: calc(100vw - 20px);
+            max-height: 56vh;
             overflow-y: auto;
             overflow-x: hidden;
             display: none;
             flex-direction: column;
-            gap: 14px;
-            box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+            gap: 12px;
+            box-shadow: 0 6px 32px rgba(0,0,0,0.85);
             scrollbar-width: thin;
-            scrollbar-color: rgba(168,85,247,0.4) transparent;
+            scrollbar-color: rgba(168,85,247,0.35) transparent;
         }
-        #settingsPanel::-webkit-scrollbar { width: 4px; }
-        #settingsPanel::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.4); border-radius: 4px; }
-        #settingsPanel::-webkit-scrollbar-track { background: transparent; }
+        #settingsPanel::-webkit-scrollbar { width: 3px; }
+        #settingsPanel::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.4); border-radius: 3px; }
         #settingsPanel.open { display: flex; }
 
         .sp-title {
-            font-size: .7rem; font-weight: 600; letter-spacing: 1px;
-            text-transform: uppercase; color: #a855f7;
+            font-size: .68rem; font-weight: 700; letter-spacing: 1px;
+            text-transform: uppercase; color: var(--accent);
             border-bottom: 1px solid rgba(168,85,247,0.2);
-            padding-bottom: 8px; margin-bottom: 2px;
+            padding-bottom: 7px;
         }
-        .sp-section { display: flex; flex-direction: column; gap: 8px; }
-        .sp-label { font-size: .72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .7px; }
-
-        /* Row for audio / subtitle selects */
+        .sp-section { display: flex; flex-direction: column; gap: 6px; }
+        .sp-label { font-size: .68rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .7px; }
         .sp-select {
-            background: rgba(30,30,60,0.9); color: #e2e8f0;
-            border: 1px solid rgba(100,100,180,0.35); border-radius: 7px;
-            padding: 7px 10px; font-size: .82rem; cursor: pointer; outline: none;
+            background: rgba(25,25,45,0.95); color: #e2e8f0;
+            border: 1px solid rgba(100,100,180,0.3); border-radius: 7px;
+            padding: 6px 8px; font-size: .80rem; cursor: pointer; outline: none;
             font-family: 'Inter', sans-serif; width: 100%;
         }
-        .sp-select:focus { border-color: #a855f7; }
+        .sp-select:focus { border-color: var(--accent); }
 
-        /* Subtitle appearance controls */
-        .sp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-
-        /* Color swatches */
-        .swatch-wrap { display: flex; gap: 6px; flex-wrap: wrap; }
+        /* Colour swatches */
+        .swatch-wrap { display: flex; gap: 5px; flex-wrap: wrap; }
         .swatch {
-            width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
-            border: 2px solid transparent; transition: border-color .15s, transform .15s;
-            flex-shrink: 0;
+            width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; transition: border-color .12s, transform .12s;
         }
-        .swatch.active, .swatch:hover { border-color: #fff; transform: scale(1.15); }
+        .swatch.active, .swatch:hover { border-color: #fff; transform: scale(1.18); }
 
-        /* Toggle switch */
-        .toggle-wrap { display: flex; align-items: center; gap: 8px; font-size: .82rem; color: #cbd5e1; }
-        .toggle { position: relative; width: 38px; height: 21px; flex-shrink: 0; }
+        /* Toggle */
+        .toggle-wrap { display: flex; align-items: center; gap: 8px; font-size: .80rem; color: #cbd5e1; }
+        .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
         .toggle input { opacity: 0; width: 0; height: 0; }
         .toggle-slider {
             position: absolute; inset: 0;
-            background: #334155; border-radius: 21px; cursor: pointer;
-            transition: background .2s;
+            background: #334155; border-radius: 20px; cursor: pointer; transition: background .18s;
         }
         .toggle-slider:before {
             content: ""; position: absolute;
-            width: 15px; height: 15px; border-radius: 50%;
-            background: #fff; top: 3px; left: 3px;
-            transition: transform .2s;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #fff; top: 3px; left: 3px; transition: transform .18s;
         }
-        .toggle input:checked + .toggle-slider { background: #a855f7; }
-        .toggle input:checked + .toggle-slider:before { transform: translateX(17px); }
+        .toggle input:checked + .toggle-slider { background: var(--accent); }
+        .toggle input:checked + .toggle-slider:before { transform: translateX(16px); }
 
-        /* Font size slider */
-        .sp-slider {
-            width: 100%; accent-color: #a855f7; cursor: pointer;
-        }
+        /* Size slider */
+        .sp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
         .sp-slider-row { display: flex; align-items: center; gap: 8px; }
-        .sp-slider-val { font-size: .78rem; color: #94a3b8; min-width: 32px; text-align: right; }
+        .sp-slider-val { font-size: .74rem; color: #94a3b8; min-width: 34px; text-align: right; }
 
-        /* ═══════════════════════════════════════
-           NATIVE ::cue STYLING
-           Updated dynamically by JS
-        ═══════════════════════════════════════ */
-        #cueStyle { /* injected dynamically */ }
+        /* ::cue — updated dynamically */
+        #cueStyle { }
 
-        /* ═══════════════════════════════════════
-           BELOW-VIDEO PANEL
-        ═══════════════════════════════════════ */
+        /* ── Below-video panel ── */
         .panel {
             background: var(--card); border: 1px solid var(--border);
             border-radius: var(--radius); padding: 18px 20px;
@@ -202,9 +170,9 @@
             display: flex; align-items: center; gap: 8px;
             background: var(--card); border: 1px solid var(--border);
             border-radius: 9px; padding: 9px 14px;
-            color: var(--text); font-size: .82rem;
-            text-decoration: none; font-family: 'Inter', sans-serif;
-            transition: background .2s, border-color .2s;
+            color: var(--text); font-size: .82rem; text-decoration: none;
+            font-family: 'Inter', sans-serif;
+            transition: background .18s, border-color .18s;
             -webkit-tap-highlight-color: transparent;
         }
         .ext-btn:hover, .ext-btn:active { background: #1e1e3a; border-color: var(--accent); }
@@ -224,19 +192,15 @@
             font-size: .76rem; color: var(--muted);
         }
         footer a { color: var(--accent); text-decoration: none; }
-    </style>
-    <!-- Dynamic ::cue styles injected by JS into this tag -->
-    <style id="cueStyle">
+
+        /* Native subtitle cue — updated by JS */
         ::cue {
-            font-family: 'Inter', Arial, sans-serif;
-            font-size: 1.05em;
-            color: #ffffff;
-            background: rgba(0,0,0,0.75);
-            border-radius: 3px;
-            padding: 2px 6px;
-            line-height: 1.5;
+            font-family: 'Inter', Arial, sans-serif; font-size: 1.05em;
+            color: #fff; background: rgba(0,0,0,0.75);
+            border-radius: 3px; padding: 2px 6px; line-height: 1.5;
         }
     </style>
+    <style id="cueStyle"></style>
 </head>
 <body>
 
@@ -250,9 +214,6 @@
 
 <div class="page">
 
-    <!-- ═══════════════════════════════════════
-         VIDEO WRAP — fullscreen target
-    ═══════════════════════════════════════ -->
     <div class="video-wrap" id="videoWrap">
 
         <video id="player"
@@ -266,12 +227,16 @@
 
         <div id="subCanvas"></div>
 
-        <!-- settingsBtn and settingsPanel are in <body> directly (appended by JS)
-             so backdrop-filter on ancestors cannot break position:fixed -->
+        <!-- Gear button — inside .video-wrap, z-index above video -->
+        <button id="settingsBtn" title="Settings" aria-label="Settings">
+            <i class="fa fa-gear"></i>
+        </button>
+
+        <!-- Settings panel — inside .video-wrap, scrollable -->
         <div id="settingsPanel">
+
             <div class="sp-title"><i class="fa fa-sliders"></i> Player Settings</div>
 
-            <!-- Audio track -->
             <div class="sp-section">
                 <div class="sp-label">🔊 Audio Track</div>
                 <select class="sp-select" id="spAudioSel">
@@ -279,7 +244,6 @@
                 </select>
             </div>
 
-            <!-- Subtitle track -->
             <div class="sp-section">
                 <div class="sp-label">💬 Subtitles</div>
                 <select class="sp-select" id="spSubSel">
@@ -287,15 +251,11 @@
                 </select>
             </div>
 
-            <!-- Subtitle text colour -->
-            <div class="sp-section" id="subAppearSection">
+            <div class="sp-section">
                 <div class="sp-label">🎨 Subtitle Colour</div>
-                <div class="swatch-wrap" id="colorSwatches">
-                    <!-- built by JS -->
-                </div>
+                <div class="swatch-wrap" id="colorSwatches"></div>
             </div>
 
-            <!-- Subtitle background toggle -->
             <div class="sp-section">
                 <div class="toggle-wrap">
                     <label class="toggle">
@@ -306,7 +266,6 @@
                 </div>
             </div>
 
-            <!-- Subtitle font size -->
             <div class="sp-section">
                 <div class="sp-label">🔤 Subtitle Size</div>
                 <div class="sp-slider-row">
@@ -315,7 +274,6 @@
                 </div>
             </div>
 
-            <!-- Playback speed -->
             <div class="sp-section">
                 <div class="sp-label">⚡ Speed</div>
                 <select class="sp-select" id="spSpeedSel">
@@ -334,21 +292,18 @@
 
     </div><!-- .video-wrap -->
 
-    <!-- Below-video panel (mirrors in-player panel for non-fullscreen ease) -->
+    <!-- Below-video panel -->
     <div class="panel">
-
         <div class="ctrl-group">
             <label><i class="fa fa-music"></i> Audio Track</label>
             <select id="audioSel"><option value="-1">Detecting…</option></select>
             <div class="ctrl-note" id="audioNote"></div>
         </div>
-
         <div class="ctrl-group">
             <label><i class="fa fa-closed-captioning"></i> Subtitles</label>
             <select id="subSel"><option value="-1">Off</option></select>
             <div class="ctrl-note" id="subNote">Detecting…</div>
         </div>
-
         <div class="ctrl-group">
             <label><i class="fa fa-gauge-high"></i> Speed</label>
             <select id="speedSel">
@@ -362,7 +317,6 @@
                 <option value="2">2×</option>
             </select>
         </div>
-
     </div>
 
     <div class="file-info">
@@ -387,9 +341,7 @@
 <div id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-// Constants — Jinja2 injects these
-// ═══════════════════════════════════════════════════════
+// ── Constants ────────────────────────────────────────────────────────
 const FILE_URL  = "{{file_url}}";
 const FILE_NAME = "{{file_name}}";
 const _u        = new URL(FILE_URL);
@@ -397,217 +349,92 @@ const MSG_ID    = _u.pathname.split("/").filter(Boolean)[0];
 const HASH      = _u.searchParams.get("hash") || "";
 const BASE      = _u.origin;
 
-// ═══════════════════════════════════════════════════════
-// DOM refs
-// ═══════════════════════════════════════════════════════
-const player     = document.getElementById("player");
-const videoWrap  = document.getElementById("videoWrap");
-const audioSel   = document.getElementById("audioSel");
-const audioNote  = document.getElementById("audioNote");
-const subSel     = document.getElementById("subSel");
-const subNote    = document.getElementById("subNote");
-const speedSel   = document.getElementById("speedSel");
-const spAudioSel = document.getElementById("spAudioSel");
-const spSubSel   = document.getElementById("spSubSel");
-const spSpeedSel = document.getElementById("spSpeedSel");
-const cueStyleEl = document.getElementById("cueStyle");
+// ── DOM refs ─────────────────────────────────────────────────────────
+const player      = document.getElementById("player");
+const audioSel    = document.getElementById("audioSel");
+const audioNote   = document.getElementById("audioNote");
+const subSel      = document.getElementById("subSel");
+const subNote     = document.getElementById("subNote");
+const speedSel    = document.getElementById("speedSel");
+const spAudioSel  = document.getElementById("spAudioSel");
+const spSubSel    = document.getElementById("spSubSel");
+const spSpeedSel  = document.getElementById("spSpeedSel");
+const cueStyleEl  = document.getElementById("cueStyle");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsPan = document.getElementById("settingsPanel");
 
-// ═══════════════════════════════════════════════════════
-// Speed (both panels synced)
-// ═══════════════════════════════════════════════════════
+// ── Settings panel toggle ────────────────────────────────────────────
+settingsBtn.onclick = (e) => {
+    e.stopPropagation();
+    settingsPan.classList.toggle("open");
+};
+document.addEventListener("click", (e) => {
+    if (!settingsPan.contains(e.target) && e.target !== settingsBtn)
+        settingsPan.classList.remove("open");
+});
+
+// ── Speed ────────────────────────────────────────────────────────────
 function setSpeed(v) {
-    player.playbackRate  = parseFloat(v);
-    speedSel.value       = v;
-    spSpeedSel.value     = v;
+    player.playbackRate = parseFloat(v);
+    speedSel.value = spSpeedSel.value = v;
 }
 speedSel.onchange   = () => setSpeed(speedSel.value);
 spSpeedSel.onchange = () => setSpeed(spSpeedSel.value);
 
-// ═══════════════════════════════════════════════════════
-// SUBTITLE APPEARANCE
-// ═══════════════════════════════════════════════════════
+// ── Subtitle appearance ──────────────────────────────────────────────
 const SUB_COLORS = [
-    { name: "White",       hex: "#ffffff" },
-    { name: "Yellow",      hex: "#fde047" },
-    { name: "Cyan",        hex: "#67e8f9" },
-    { name: "Green",       hex: "#86efac" },
-    { name: "Orange",      hex: "#fb923c" },
-    { name: "Pink",        hex: "#f9a8d4" },
-    { name: "Red",         hex: "#f87171" },
-    { name: "Light Blue",  hex: "#93c5fd" },
+    { name:"White",      hex:"#ffffff" },
+    { name:"Yellow",     hex:"#fde047" },
+    { name:"Cyan",       hex:"#67e8f9" },
+    { name:"Green",      hex:"#86efac" },
+    { name:"Orange",     hex:"#fb923c" },
+    { name:"Pink",       hex:"#f9a8d4" },
+    { name:"Red",        hex:"#f87171" },
+    { name:"Light Blue", hex:"#93c5fd" },
 ];
-
-let subColor  = "#ffffff";
-let subBg     = true;
-let subSizePct= 105;
+let subColor = "#ffffff", subBg = true, subSizePct = 105;
 
 function buildColorSwatches() {
     const wrap = document.getElementById("colorSwatches");
     SUB_COLORS.forEach(c => {
         const s = document.createElement("div");
-        s.className   = "swatch" + (c.hex === subColor ? " active" : "");
-        s.style.background = c.hex;
-        s.title       = c.name;
-        s.onclick     = () => {
+        s.className = "swatch" + (c.hex === subColor ? " active" : "");
+        s.style.background = c.hex; s.title = c.name;
+        s.onclick = () => {
             wrap.querySelectorAll(".swatch").forEach(x => x.classList.remove("active"));
             s.classList.add("active");
-            subColor = c.hex;
-            applyCueStyle();
+            subColor = c.hex; applyCueStyle();
         };
         wrap.appendChild(s);
     });
 }
 
 function applyCueStyle() {
-    const bg = subBg ? "rgba(0,0,0,0.75)" : "transparent";
-    const pad = subBg ? "2px 6px" : "0";
+    const bg   = subBg ? "rgba(0,0,0,0.75)" : "transparent";
+    const pad  = subBg ? "2px 6px" : "0";
     const size = (subSizePct / 100).toFixed(2) + "em";
-    cueStyleEl.textContent = `
-        ::cue {
-            font-family: 'Inter', Arial, sans-serif;
-            font-size: ${size};
-            color: ${subColor};
-            background: ${bg};
-            border-radius: ${subBg ? "3px" : "0"};
-            padding: ${pad};
-            line-height: 1.5;
-        }
-    `;
+    cueStyleEl.textContent = `::cue{font-family:'Inter',Arial,sans-serif;font-size:${size};color:${subColor};background:${bg};border-radius:${subBg?"3px":"0"};padding:${pad};line-height:1.5;}`;
 }
 
-// Background toggle
-document.getElementById("bgToggle").onchange = function() {
-    subBg = this.checked;
-    applyCueStyle();
-};
-
-// Size slider
+document.getElementById("bgToggle").onchange = function() { subBg = this.checked; applyCueStyle(); };
 const sizeSlider = document.getElementById("sizeSlider");
 const sizeVal    = document.getElementById("sizeVal");
-sizeSlider.oninput = () => {
-    subSizePct = parseInt(sizeSlider.value);
-    sizeVal.textContent = subSizePct + "%";
-    applyCueStyle();
-};
+sizeSlider.oninput = () => { subSizePct = parseInt(sizeSlider.value); sizeVal.textContent = subSizePct + "%"; applyCueStyle(); };
 
 buildColorSwatches();
 applyCueStyle();
 
-// ═══════════════════════════════════════════════════════
-// IN-PLAYER SETTINGS PANEL — gear button
-//
-// The button and panel are moved to document.body via JS.
-// This bypasses stacking-context breakage caused by any
-// ancestor with backdrop-filter, transform, or filter.
-// Positioning is done via getBoundingClientRect so the
-// button always sits at the bottom-right of the video.
-// ═══════════════════════════════════════════════════════
-const settingsBtn   = document.getElementById("settingsBtn");
-const settingsPanel = document.getElementById("settingsPanel");
-
-// Move both directly into <body> — out of any transformed ancestor
-document.body.appendChild(settingsBtn);
-document.body.appendChild(settingsPanel);
-
-function positionBtn() {
-    const inFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
-    if (inFS) {
-        // Fullscreen: pin to bottom-right of viewport, above native controls
-        settingsBtn.style.cssText += ";right:12px;bottom:80px;top:auto;left:auto;";
-    } else {
-        // Normal: anchor to bottom-right corner of the video element
-        const r = player.getBoundingClientRect();
-        const scrollY = window.scrollY || window.pageYOffset;
-        settingsBtn.style.top    = (r.bottom - 48 + scrollY) + "px";
-        settingsBtn.style.left   = (r.right  - 50) + "px";
-        settingsBtn.style.right  = "auto";
-        settingsBtn.style.bottom = "auto";
-    }
-}
-
-function positionPanel() {
-    const btnR   = settingsBtn.getBoundingClientRect();
-    const panW   = 278;
-    const margin = 8;
-
-    // Horizontal: right-align with button
-    let rightEdge = window.innerWidth - btnR.right;
-    if (rightEdge < margin) rightEdge = margin;
-    settingsPanel.style.right = rightEdge + "px";
-    settingsPanel.style.left  = "auto";
-
-    // Vertical: prefer above button, fall back to below
-    const spaceAbove = btnR.top - margin;
-    const maxH       = Math.min(window.innerHeight * 0.70, 480);
-    if (spaceAbove >= 180) {
-        settingsPanel.style.bottom = (window.innerHeight - btnR.top + 6) + "px";
-        settingsPanel.style.top    = "auto";
-    } else {
-        settingsPanel.style.top    = (btnR.bottom + 6) + "px";
-        settingsPanel.style.bottom = "auto";
-    }
-}
-
-settingsBtn.onclick = (e) => {
-    e.stopPropagation();
-    const opening = !settingsPanel.classList.contains("open");
-    settingsPanel.classList.toggle("open");
-    if (opening) positionPanel();
-};
-
-document.addEventListener("click", (e) => {
-    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
-        settingsPanel.classList.remove("open");
-    }
-});
-
-// Reposition on scroll / resize
-window.addEventListener("scroll",  () => {
-    positionBtn();
-    if (settingsPanel.classList.contains("open")) positionPanel();
-}, { passive: true });
-window.addEventListener("resize",  () => {
-    positionBtn();
-    if (settingsPanel.classList.contains("open")) positionPanel();
-});
-
-// Fullscreen toggle on double-tap
-player.addEventListener("dblclick", () => {
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        const req = player.requestFullscreen || player.webkitRequestFullscreen;
-        if (req) req.call(player);
-    } else {
-        const exit = document.exitFullscreen || document.webkitExitFullscreen;
-        if (exit) exit.call(document);
-    }
-});
-
-function onFullscreenChange() {
-    positionBtn();
-    if (settingsPanel.classList.contains("open")) positionPanel();
-}
-document.addEventListener("fullscreenchange",       onFullscreenChange);
-document.addEventListener("webkitfullscreenchange", onFullscreenChange);
-
-// Initial position after layout
-requestAnimationFrame(positionBtn);
-player.addEventListener("loadedmetadata", positionBtn);
-
-// ═══════════════════════════════════════════════════════
-// EXTERNAL PLAYER BUTTONS
-// ═══════════════════════════════════════════════════════
+// ── External player buttons ──────────────────────────────────────────
 const encName   = encodeURIComponent(FILE_NAME);
 const isAndroid = /android/i.test(navigator.userAgent);
 const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
-function makeBtn(icon, label, href, extraClass) {
+function makeBtn(icon, label, href, cls) {
     const a = document.createElement("a");
-    a.className = "ext-btn" + (extraClass ? " " + extraClass : "");
+    a.className = "ext-btn" + (cls ? " " + cls : "");
     a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
-    if (typeof icon === "string" && icon.startsWith("http")) {
-        const img = document.createElement("img");
-        img.src = icon; img.alt = label;
-        a.appendChild(img);
+    if (icon.startsWith("http")) {
+        const img = document.createElement("img"); img.src = icon; img.alt = label; a.appendChild(img);
     } else {
         const i = document.createElement("i"); i.className = icon; a.appendChild(i);
     }
@@ -627,19 +454,17 @@ function buildExternalButtons() {
         wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png", "VLC",     `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(FILE_URL)}`));
         wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png",   "nPlayer", FILE_URL.replace(/^https?/, "nplayer-https")));
     } else {
-        const vlcBtn = makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png", "Open in VLC", `vlc://${FILE_URL}`);
-        vlcBtn.target = "_self"; wrap.appendChild(vlcBtn);
-        const cpBtn = makeBtn("fa fa-copy", "Copy URL", "#");
-        cpBtn.addEventListener("click", e => { e.preventDefault(); navigator.clipboard?.writeText(FILE_URL).then(() => toast("URL copied!")).catch(() => toast("Copy failed")); });
-        wrap.appendChild(cpBtn);
+        const v = makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png", "Open in VLC", `vlc://${FILE_URL}`);
+        v.target = "_self"; wrap.appendChild(v);
+        const c = makeBtn("fa fa-copy", "Copy URL", "#");
+        c.onclick = e => { e.preventDefault(); navigator.clipboard?.writeText(FILE_URL).then(() => toast("URL copied!")).catch(() => toast("Copy failed")); };
+        wrap.appendChild(c);
     }
     wrap.appendChild(makeBtn("fa fa-download", "Download", FILE_URL, "dl"));
 }
 buildExternalButtons();
 
-// ═══════════════════════════════════════════════════════
-// TRACK INFO — /info/ endpoint
-// ═══════════════════════════════════════════════════════
+// ── Track info ───────────────────────────────────────────────────────
 let subTrackMap    = {};
 let nativeTrackMap = {};
 let activeSubIdx   = -1;
@@ -658,24 +483,21 @@ async function loadTrackInfo() {
         buildSubUI(data.subtitles  || []);
     } catch(e) {
         console.warn("Track info:", e.message);
-        audioSel.innerHTML   = '<option value="-1">Default</option>';
-        spAudioSel.innerHTML = '<option value="-1">Default</option>';
-        audioNote.textContent = "Server timeout — single track assumed";
-        subSel.innerHTML   = '<option value="-1">Off</option>';
-        spSubSel.innerHTML = '<option value="-1">Off</option>';
-        subNote.textContent = "Subtitle info unavailable";
+        const defA = '<option value="-1">Default</option>';
+        audioSel.innerHTML = spAudioSel.innerHTML = defA;
+        audioNote.textContent = "Could not detect tracks";
+        subSel.innerHTML = spSubSel.innerHTML = '<option value="-1">Off</option>';
+        subNote.textContent = "Could not detect subtitles";
     }
 }
 
-// ═══════════════════════════════════════════════════════
-// AUDIO
-// ═══════════════════════════════════════════════════════
+// ── Audio ────────────────────────────────────────────────────────────
 function buildAudioUI(tracks) {
-    const mkOpts = (sel) => {
+    function mkOpts(sel) {
         sel.innerHTML = "";
         if (tracks.length <= 1) {
-            const label = tracks[0] ? (tracks[0].lang ? `${tracks[0].label} - ${tracks[0].lang}` : tracks[0].label) : "Default";
-            sel.innerHTML = `<option value="-1">${label}</option>`;
+            const lbl = tracks[0] ? (tracks[0].lang ? `${tracks[0].label} - ${tracks[0].lang}` : tracks[0].label) : "Default";
+            sel.innerHTML = `<option value="-1">${lbl}</option>`;
         } else {
             tracks.forEach((t, i) => {
                 const o = document.createElement("option");
@@ -685,17 +507,12 @@ function buildAudioUI(tracks) {
                 sel.appendChild(o);
             });
         }
-    };
-    mkOpts(audioSel);
-    mkOpts(spAudioSel);
+    }
+    mkOpts(audioSel); mkOpts(spAudioSel);
     audioNote.textContent = tracks.length <= 1 ? "Single audio track" : `${tracks.length} tracks — select to switch`;
-
-    const onAudioChange = (v) => {
-        audioSel.value = v; spAudioSel.value = v;
-        switchAudio(parseInt(v));
-    };
-    audioSel.onchange   = () => onAudioChange(audioSel.value);
-    spAudioSel.onchange = () => onAudioChange(spAudioSel.value);
+    const onChange = v => { audioSel.value = spAudioSel.value = v; switchAudio(parseInt(v)); };
+    audioSel.onchange   = () => onChange(audioSel.value);
+    spAudioSel.onchange = () => onChange(spAudioSel.value);
 }
 
 function switchAudio(idx) {
@@ -709,31 +526,27 @@ function switchAudio(idx) {
     }, { once: true });
 }
 
-// ═══════════════════════════════════════════════════════
-// SUBTITLES
-// ═══════════════════════════════════════════════════════
+// ── Subtitles ────────────────────────────────────────────────────────
 function buildSubUI(tracks) {
     subTrackMap = {};
-    const mkOpts = (sel) => {
+    function mkOpts(sel) {
         sel.innerHTML = '<option value="-1">Off</option>';
         tracks.forEach(t => {
             const o = document.createElement("option");
             o.value = t.index;
             o.textContent = t.lang ? `${t.label} [${t.lang}]` : t.label;
             sel.appendChild(o);
-            subTrackMap[t.index] = { url: `${BASE}/sub/${MSG_ID}/${t.index}?hash=${HASH}`, fmt: t.codec || "", label: t.label, lang: t.lang || "und" };
+            subTrackMap[t.index] = {
+                url: `${BASE}/sub/${MSG_ID}/${t.index}?hash=${HASH}`,
+                fmt: t.codec || "", label: t.label, lang: t.lang || "und"
+            };
         });
-    };
-    mkOpts(subSel);
-    mkOpts(spSubSel);
-    subNote.textContent = tracks.length === 0 ? "No subtitles in this file" : `${tracks.length} track${tracks.length > 1 ? "s" : ""} available`;
-
-    const onSubChange = (v) => {
-        subSel.value = v; spSubSel.value = v;
-        switchSubtitle(parseInt(v));
-    };
-    subSel.onchange   = () => onSubChange(subSel.value);
-    spSubSel.onchange = () => onSubChange(spSubSel.value);
+    }
+    mkOpts(subSel); mkOpts(spSubSel);
+    subNote.textContent = tracks.length === 0 ? "No subtitles" : `${tracks.length} track${tracks.length > 1 ? "s" : ""} available`;
+    const onChange = v => { subSel.value = spSubSel.value = v; switchSubtitle(parseInt(v)); };
+    subSel.onchange   = () => onChange(subSel.value);
+    spSubSel.onchange = () => onChange(spSubSel.value);
 }
 
 function clearSubs() {
@@ -743,18 +556,16 @@ function clearSubs() {
 }
 
 async function switchSubtitle(idx) {
-    activeSubIdx = idx;
-    clearSubs();
-    subSel.value = idx; spSubSel.value = idx;
+    activeSubIdx = idx; clearSubs();
+    subSel.value = spSubSel.value = String(idx);
     if (idx < 0 || !subTrackMap[idx]) { subNote.textContent = "Subtitles off"; return; }
-
     const info = subTrackMap[idx];
     subNote.textContent = "Loading…";
     try {
         const head = await fetch(info.url, { method: "HEAD" }).catch(() => null);
         const fmt  = head ? (head.headers.get("X-Subtitle-Format") || info.fmt || "").toLowerCase() : (info.fmt || "").toLowerCase();
         await showVTT(info);
-        subNote.textContent = `▶ ${info.label}${info.lang && info.lang !== "und" ? " ["+info.lang+"]" : ""}`;
+        subNote.textContent = `▶ ${info.label}${info.lang && info.lang !== "und" ? " [" + info.lang + "]" : ""}`;
         if (fmt === "ass" || fmt === "ssa") trySubOctopus(info);
     } catch(e) {
         console.error("Subtitle error:", e);
@@ -765,13 +576,11 @@ async function switchSubtitle(idx) {
 async function showVTT(info) {
     const prev = nativeTrackMap[info.index];
     if (prev && player.contains(prev)) { player.removeChild(prev); delete nativeTrackMap[info.index]; }
-
     const el = document.createElement("track");
     el.kind = "subtitles"; el.label = info.label;
     el.srclang = info.lang || "und"; el.src = info.url; el.default = false;
     player.appendChild(el);
     nativeTrackMap[info.index] = el;
-
     await new Promise(resolve => {
         if (el.readyState === 2) { resolve(); return; }
         if (el.readyState === 3) {
@@ -788,7 +597,6 @@ async function showVTT(info) {
         el.addEventListener("error", resolve, { once: true });
         setTimeout(resolve, 8000);
     });
-
     Array.from(player.textTracks).forEach(t => { t.mode = "hidden"; });
     const active = nativeTrackMap[info.index];
     if (active?.track) active.track.mode = "showing";
@@ -796,42 +604,35 @@ async function showVTT(info) {
 
 async function trySubOctopus(info) {
     const cdns = [
-        { js: "https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus.js", wk: "https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus-worker.js" },
-        { js: "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",      wk: "https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
-        { js: "https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",                  wk: "https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
+        { js:"https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus.js", wk:"https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus-worker.js" },
+        { js:"https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",      wk:"https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
+        { js:"https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",                  wk:"https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
     ];
     if (!window.SubtitlesOctopus) {
         for (const cdn of cdns) {
-            try {
-                await new Promise((ok, fail) => { const s = document.createElement("script"); s.src = cdn.js; s.onload = () => { _octWkr = cdn.wk; ok(); }; s.onerror = fail; document.head.appendChild(s); });
-                break;
-            } catch(e) { console.warn("SubOctopus CDN failed:", cdn.js); }
+            try { await new Promise((ok,fail) => { const s=document.createElement("script"); s.src=cdn.js; s.onload=()=>{_octWkr=cdn.wk;ok();}; s.onerror=fail; document.head.appendChild(s); }); break; }
+            catch(e) { console.warn("SubOctopus CDN failed:", cdn.js); }
         }
     }
     if (!window.SubtitlesOctopus) return;
     try {
         const res2 = await fetch(info.url); if (!res2.ok) return;
         const txt2 = await res2.text();
-        const blob = new Blob([txt2], { type: "text/plain" });
+        const blob = new Blob([txt2], {type:"text/plain"});
         const burl = URL.createObjectURL(blob);
         const wrap = document.getElementById("subCanvas");
         wrap.innerHTML = "";
-        Array.from(player.textTracks).forEach(t => { try { t.mode = "hidden"; } catch(e) {} });
+        Array.from(player.textTracks).forEach(t => { try{t.mode="hidden";}catch(e){} });
         octopusInst = new window.SubtitlesOctopus({
-            video: player, subUrl: burl, workerUrl: _octWkr, renderMode: "wasm-blend", targetFps: 24,
-            onReady: () => URL.revokeObjectURL(burl),
-            onError: (e) => { URL.revokeObjectURL(burl); if (nativeTrackMap[info.index]?.track) nativeTrackMap[info.index].track.mode = "showing"; },
+            video:player, subUrl:burl, workerUrl:_octWkr, renderMode:"wasm-blend", targetFps:24,
+            onReady:()=>URL.revokeObjectURL(burl),
+            onError:(e)=>{ URL.revokeObjectURL(burl); if(nativeTrackMap[info.index]?.track) nativeTrackMap[info.index].track.mode="showing"; },
         });
-        setTimeout(() => {
-            const c = document.querySelector(".libassjs-canvas-parent");
-            if (c) { c.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"; wrap.appendChild(c); }
-        }, 300);
+        setTimeout(()=>{ const c=document.querySelector(".libassjs-canvas-parent"); if(c){c.style.cssText="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";wrap.appendChild(c);} }, 300);
     } catch(e) { console.warn("SubOctopus render failed:", e); }
 }
 
-// ═══════════════════════════════════════════════════════
-// Toast
-// ═══════════════════════════════════════════════════════
+// ── Toast ────────────────────────────────────────────────────────────
 let _tt;
 function toast(msg) {
     const el = document.getElementById("toast");
@@ -839,9 +640,7 @@ function toast(msg) {
     clearTimeout(_tt); _tt = setTimeout(() => el.style.display = "none", 5000);
 }
 
-// ═══════════════════════════════════════════════════════
-// Init
-// ═══════════════════════════════════════════════════════
+// ── Init ─────────────────────────────────────────────────────────────
 loadTrackInfo();
 </script>
 </body>
