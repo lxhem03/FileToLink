@@ -638,6 +638,8 @@ buildExternalButtons();
 
 // ── Track info ────────────────────────────────────────────────────────
 let subTrackMap={}, nativeTrackMap={}, activeSubIdx=-1, octopusInst=null, _octWkr="";
+let activeAudioIdx = -1;     // tracks which audio track is selected
+let audioSrcMode   = false;  // true = we switched src to /audio/ endpoint
 
 async function loadTrackInfo(){
     try{
@@ -675,12 +677,52 @@ function buildAudioUI(tracks){
     const onChange=v=>{audioSel.value=spAudioSel.value=v; switchAudio(parseInt(v));};
     audioSel.onchange=()=>onChange(audioSel.value); spAudioSel.onchange=()=>onChange(spAudioSel.value);
 }
-function switchAudio(idx){
-    const t=vid.currentTime, playing=!vid.paused;
-    vid.src=idx<0?FILE_URL:`${BASE}/audio/${MSG_ID}/${idx}?hash=${HASH}`;
-    vid.load();
-    vid.addEventListener("loadedmetadata",()=>{ vid.currentTime=t; if(playing)vid.play().catch(()=>{}); if(activeSubIdx>=0)setTimeout(()=>switchSubtitle(activeSubIdx),400); },{once:true});
+function audioUrl(idx, startSec) {
+    if (idx < 0) return FILE_URL;
+    let url = `${BASE}/audio/${MSG_ID}/${idx}?hash=${HASH}`;
+    if (startSec && startSec > 0) url += `&start=${startSec.toFixed(2)}`;
+    return url;
 }
+
+function switchAudio(idx){
+    activeAudioIdx = idx;
+
+    // Strategy 1: Browser native AudioTrackList API.
+    // No src change — full seekability preserved.
+    if (vid.audioTracks && vid.audioTracks.length > 1) {
+        audioSrcMode = false;
+        Array.from(vid.audioTracks).forEach((t, i) => {
+            t.enabled = (idx < 0) ? (i === 0) : (i === idx);
+        });
+        return;
+    }
+
+    // Strategy 2: Switch src to /audio/ endpoint (with seek offset).
+    audioSrcMode = true;
+    const t = vid.currentTime, playing = !vid.paused;
+    vid.src = audioUrl(idx, t);
+    vid.load();
+    vid.addEventListener("loadedmetadata", () => {
+        if (playing) vid.play().catch(() => {});
+        if (activeSubIdx >= 0) setTimeout(() => switchSubtitle(activeSubIdx), 400);
+    }, { once: true });
+}
+
+// When user seeks while in audio src-switch mode, reload from new position
+// so the stream starts at the right point (ffmpeg -ss seek on server)
+vid.addEventListener("seeking", () => {
+    if (!audioSrcMode || activeAudioIdx < 0) return;
+    // Don't react to seeks triggered by our own src change
+    const targetTime = vid.currentTime;
+    const playing    = !vid.paused;
+    const newSrc     = audioUrl(activeAudioIdx, targetTime);
+    if (vid.src === newSrc) return;
+    vid.src = newSrc;
+    vid.load();
+    vid.addEventListener("loadedmetadata", () => {
+        if (playing) vid.play().catch(() => {});
+    }, { once: true });
+});
 
 // ── Subtitles ─────────────────────────────────────────────────────────
 function buildSubUI(tracks){
