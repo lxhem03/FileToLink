@@ -416,18 +416,25 @@ function togglePlay() {
     else vid.pause();
 }
 document.getElementById("btnPlay").onclick = togglePlay;
-vid.onclick = togglePlay;
+// vid.onclick intentionally removed — user pauses via control bar only
 
-// Double-tap left/right to skip 10s
-let lastTap = 0, lastTapX = 0;
+// Double-tap left/right to skip 10s (mobile)
+// Single tap shows/hides controls — does NOT pause (user uses control bar for that)
+let lastTap = 0;
 vid.addEventListener("touchend", e => {
     const now = Date.now();
-    if (now - lastTap < 300) {
-        const x = e.changedTouches[0].clientX;
+    const dt  = now - lastTap;
+    lastTap   = now;
+    if (dt < 300 && dt > 0) {
+        // Double tap — skip
+        e.preventDefault(); // prevent any default browser action
+        const x   = e.changedTouches[0].clientX;
         const mid = vid.getBoundingClientRect().left + vid.offsetWidth / 2;
         skip(x < mid ? -10 : 10);
+    } else {
+        // Single tap — just show/refresh controls
+        showCtrl();
     }
-    lastTap = now;
 });
 
 vid.addEventListener("play",  () => { playIco.className = "fa fa-pause"; });
@@ -449,14 +456,30 @@ document.addEventListener("keydown", e => {
     if (e.code === "KeyF")       toggleFs();
 });
 
-function skip(s) { if (isFinite(vid.duration)) vid.currentTime = Math.max(0, Math.min(vid.duration, vid.currentTime + s)); }
+function skip(s) {
+    const cur = vid.currentTime;
+    const dur = vid.duration;
+    // Allow seeking even if duration is Infinity (streaming) or NaN (not yet loaded)
+    // Just clamp to 0 on the lower bound; upper bound only if duration is finite
+    const next = cur + s;
+    if (next < 0) { vid.currentTime = 0; return; }
+    if (isFinite(dur) && next > dur) { vid.currentTime = dur; return; }
+    vid.currentTime = next;
+}
 
 // ── Progress ──────────────────────────────────────────────────────────
 vid.addEventListener("timeupdate", () => {
-    if (!isFinite(vid.duration)) return;
-    const p = vid.currentTime / vid.duration;
-    progFill.style.width = (p*100) + "%";
-    timeDsp.textContent  = fmt(vid.currentTime) + " / " + fmt(vid.duration);
+    const cur = vid.currentTime;
+    const dur = vid.duration;
+    if (isFinite(dur) && dur > 0) {
+        // Normal finite duration — show progress bar and full time
+        progFill.style.width = (cur / dur * 100) + "%";
+        timeDsp.textContent  = fmt(cur) + " / " + fmt(dur);
+    } else {
+        // Streaming / duration not yet known — show current time only, no progress fill
+        timeDsp.textContent = fmt(cur);
+        // Don't touch progFill width — leave it where it is
+    }
 });
 vid.addEventListener("progress", () => {
     if (!vid.duration) return;
@@ -471,8 +494,13 @@ function scrubAt(e) {
     const r = progRow.getBoundingClientRect();
     const x = (e.touches ? e.touches[0].clientX : e.clientX);
     const ratio = Math.max(0, Math.min(1, (x-r.left)/r.width));
-    if (isFinite(vid.duration)) vid.currentTime = ratio * vid.duration;
-    progFill.style.width = (ratio*100)+"%";
+    // Only seek if duration is a real finite number — prevents snapping to 0
+    // when duration is Infinity (MKV streams) or NaN (metadata not yet loaded)
+    if (isFinite(vid.duration) && vid.duration > 0) {
+        vid.currentTime = ratio * vid.duration;
+        progFill.style.width = (ratio*100)+"%";
+    }
+    // If duration not known yet, don't move the thumb — scrubbing silently ignored
 }
 progRow.addEventListener("mousedown",  e => { scrubbing=true; scrubAt(e); });
 progRow.addEventListener("touchstart", e => { scrubbing=true; scrubAt(e); }, {passive:true});
