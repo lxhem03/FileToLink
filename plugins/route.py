@@ -187,8 +187,23 @@ async def audio_handler(request: web.Request):
         from urllib.parse import quote_plus
         file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
 
+        # Support -ss seek offset so browser Range-based seeking works.
+        # When the browser seeks, it sends a Range header. We can't honour
+        # byte-level Range on a transcoded stream, but we CAN accept a
+        # ?start=SECONDS query param that the client appends when seeking,
+        # and pass it to ffmpeg as -ss so the stream starts at the right time.
+        start_sec = request.rel_url.query.get("start", "0")
+        try:
+            start_sec = max(0.0, float(start_sec))
+        except (ValueError, TypeError):
+            start_sec = 0.0
+
         cmd = [
             "ffmpeg", "-v", "quiet", "-nostdin",
+        ]
+        if start_sec > 0:
+            cmd += ["-ss", str(start_sec)]
+        cmd += [
             "-i", file_url,
             "-map", "0:v:0", "-map", f"0:a:{track_index}",
             "-c", "copy", "-f", "matroska", "pipe:1"
@@ -201,6 +216,7 @@ async def audio_handler(request: web.Request):
             "Content-Disposition": f'inline; filename="{file_id.file_name}"',
             "Access-Control-Allow-Origin": "*",
             "Cache-Control": "no-cache",
+            "X-Audio-Track": str(track_index),
         })
         await response.prepare(request)
         try:
