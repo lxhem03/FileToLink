@@ -18,8 +18,7 @@
         nav {
             position: sticky; top: 0; z-index: 200;
             display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 24px;
-            background: #0c0c16;
+            padding: 12px 24px; background: #0c0c16;
             border-bottom: 1px solid var(--border);
         }
         .nav-brand { font-size: 1.1rem; font-weight: 600; color: var(--accent); }
@@ -28,108 +27,142 @@
 
         .page { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; }
 
-        /* ── Video wrapper ── */
-        .video-wrap {
-            position: relative;
-            background: #000;
-            border-radius: var(--radius);
-            overflow: hidden;
+        /* ═══════════════════════════════════════
+           CUSTOM VIDEO PLAYER
+        ═══════════════════════════════════════ */
+        .player-wrap {
+            position: relative; background: #000;
+            border-radius: var(--radius); overflow: hidden;
             box-shadow: 0 20px 60px rgba(0,0,0,.8);
+            user-select: none; -webkit-user-select: none;
         }
-        video#player {
-            width: 100%; max-height: 540px; display: block; background: #000;
-        }
-        #subCanvas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+        /* Fullscreen: the whole wrapper fills screen */
+        .player-wrap:fullscreen      { border-radius: 0; }
+        .player-wrap:-webkit-full-screen { border-radius: 0; }
 
-        /* ── Settings gear button — sits inside .video-wrap ── */
-        #settingsBtn {
-            position: absolute;
-            bottom: 50px; right: 8px;      /* above the native controls bar */
-            z-index: 10;
-            background: rgba(0,0,0,0.60);
-            border: none; border-radius: 7px;
-            color: #fff; font-size: .95rem;
-            width: 36px; height: 36px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            transition: background .18s;
-            -webkit-tap-highlight-color: transparent;
+        video#vid {
+            width: 100%; max-height: 540px;
+            display: block; background: #000; cursor: pointer;
         }
-        #settingsBtn:hover,
-        #settingsBtn:active { background: rgba(168,85,247,0.8); }
+        .player-wrap:fullscreen video#vid,
+        .player-wrap:-webkit-full-screen video#vid { max-height: 100vh; height: 100vh; }
 
-        /* ── Settings panel — anchored inside .video-wrap ── */
+        /* subtitle canvas */
+        #subCanvas { position: absolute; inset: 0; pointer-events: none; }
+
+        /* ── Spinner ── */
+        .spinner {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            width: 44px; height: 44px;
+            border: 3px solid rgba(255,255,255,.15);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            display: none; pointer-events: none;
+        }
+        @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+        /* ── Controls bar ── */
+        .ctrl-bar {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,.85) 60%);
+            padding: 28px 10px 8px;
+            display: flex; flex-direction: column; gap: 5px;
+            opacity: 0; transition: opacity .25s;
+            pointer-events: none;
+        }
+        .player-wrap.show-ctrl .ctrl-bar { opacity: 1; pointer-events: all; }
+        .player-wrap:fullscreen .ctrl-bar,
+        .player-wrap:-webkit-full-screen .ctrl-bar { padding-bottom: 14px; }
+
+        /* Progress row */
+        .prog-row { position: relative; height: 4px; background: rgba(255,255,255,.2); border-radius: 4px; cursor: pointer; transition: height .15s; }
+        .prog-row:hover { height: 6px; }
+        .prog-buf  { position: absolute; inset: 0; background: rgba(255,255,255,.18); border-radius: 4px; width: 0; }
+        .prog-fill { position: absolute; inset: 0; background: var(--accent); border-radius: 4px; width: 0; }
+        .prog-thumb {
+            position: absolute; top: 50%; right: -6px;
+            transform: translateY(-50%); width: 13px; height: 13px;
+            border-radius: 50%; background: #fff; transition: transform .15s;
+        }
+        .prog-row:hover .prog-thumb { transform: translateY(-50%) scale(1.3); }
+
+        /* Buttons row */
+        .btn-row { display: flex; align-items: center; gap: 2px; }
+        .cb {
+            background: none; border: none; color: #fff;
+            cursor: pointer; padding: 6px 7px; border-radius: 6px;
+            font-size: .85rem; display: flex; align-items: center;
+            transition: background .15s; -webkit-tap-highlight-color: transparent;
+        }
+        .cb:hover { background: rgba(255,255,255,.12); }
+        .time-disp { font-size: .75rem; color: rgba(255,255,255,.85); white-space: nowrap; margin: 0 4px; }
+        .spacer { flex: 1; }
+        .vol-wrap { display: flex; align-items: center; gap: 4px; }
+        .vol-slider {
+            -webkit-appearance: none; appearance: none;
+            width: 64px; height: 3px; border-radius: 3px; outline: none;
+            background: rgba(255,255,255,.3); cursor: pointer;
+        }
+        .vol-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
+
+        /* ── Settings panel — inside .player-wrap so it works in fullscreen ── */
         #settingsPanel {
-            position: absolute;
-            bottom: 92px; right: 8px;
-            z-index: 20;
+            position: absolute; bottom: 56px; right: 8px;
+            z-index: 50;
             background: rgba(10,10,20,0.97);
-            border: 1px solid rgba(168,85,247,0.4);
-            border-radius: 12px;
-            padding: 12px 14px;
-            width: 264px;
-            max-width: calc(100vw - 20px);
-            max-height: 56vh;
-            overflow-y: auto;
-            overflow-x: hidden;
-            display: none;
-            flex-direction: column;
-            gap: 12px;
-            box-shadow: 0 6px 32px rgba(0,0,0,0.85);
+            border: 1px solid rgba(168,85,247,.4);
+            border-radius: 12px; padding: 12px 14px;
+            width: 264px; max-width: calc(100vw - 20px);
+            max-height: 56vh; overflow-y: auto; overflow-x: hidden;
+            display: none; flex-direction: column; gap: 12px;
+            box-shadow: 0 6px 32px rgba(0,0,0,.85);
             scrollbar-width: thin;
-            scrollbar-color: rgba(168,85,247,0.35) transparent;
+            scrollbar-color: rgba(168,85,247,.35) transparent;
         }
         #settingsPanel::-webkit-scrollbar { width: 3px; }
-        #settingsPanel::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.4); border-radius: 3px; }
+        #settingsPanel::-webkit-scrollbar-thumb { background: rgba(168,85,247,.4); border-radius: 3px; }
         #settingsPanel.open { display: flex; }
 
         .sp-title {
             font-size: .68rem; font-weight: 700; letter-spacing: 1px;
             text-transform: uppercase; color: var(--accent);
-            border-bottom: 1px solid rgba(168,85,247,0.2);
-            padding-bottom: 7px;
+            border-bottom: 1px solid rgba(168,85,247,.2); padding-bottom: 7px;
         }
         .sp-section { display: flex; flex-direction: column; gap: 6px; }
         .sp-label { font-size: .68rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .7px; }
         .sp-select {
-            background: rgba(25,25,45,0.95); color: #e2e8f0;
-            border: 1px solid rgba(100,100,180,0.3); border-radius: 7px;
+            background: rgba(25,25,45,.95); color: #e2e8f0;
+            border: 1px solid rgba(100,100,180,.3); border-radius: 7px;
             padding: 6px 8px; font-size: .80rem; cursor: pointer; outline: none;
             font-family: 'Inter', sans-serif; width: 100%;
         }
         .sp-select:focus { border-color: var(--accent); }
-
-        /* Colour swatches */
         .swatch-wrap { display: flex; gap: 5px; flex-wrap: wrap; }
         .swatch {
             width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
             border: 2px solid transparent; transition: border-color .12s, transform .12s;
         }
         .swatch.active, .swatch:hover { border-color: #fff; transform: scale(1.18); }
-
-        /* Toggle */
         .toggle-wrap { display: flex; align-items: center; gap: 8px; font-size: .80rem; color: #cbd5e1; }
         .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
         .toggle input { opacity: 0; width: 0; height: 0; }
-        .toggle-slider {
-            position: absolute; inset: 0;
-            background: #334155; border-radius: 20px; cursor: pointer; transition: background .18s;
-        }
-        .toggle-slider:before {
-            content: ""; position: absolute;
-            width: 14px; height: 14px; border-radius: 50%;
-            background: #fff; top: 3px; left: 3px; transition: transform .18s;
-        }
+        .toggle-slider { position: absolute; inset: 0; background: #334155; border-radius: 20px; cursor: pointer; transition: background .18s; }
+        .toggle-slider:before { content:""; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: transform .18s; }
         .toggle input:checked + .toggle-slider { background: var(--accent); }
         .toggle input:checked + .toggle-slider:before { transform: translateX(16px); }
-
-        /* Size slider */
         .sp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
         .sp-slider-row { display: flex; align-items: center; gap: 8px; }
         .sp-slider-val { font-size: .74rem; color: #94a3b8; min-width: 34px; text-align: right; }
 
-        /* ::cue — updated dynamically */
-        #cueStyle { }
+        /* ── ::cue ── */
+        #cueStyle {}
+        ::cue {
+            font-family: 'Inter', Arial, sans-serif; font-size: 1.05em;
+            color: #fff; background: rgba(0,0,0,.75);
+            border-radius: 3px; padding: 2px 6px; line-height: 1.5;
+        }
 
         /* ── Below-video panel ── */
         .panel {
@@ -160,7 +193,6 @@
         .file-icon { font-size: 1.4rem; color: var(--accent); flex-shrink: 0; }
         .fname { font-size: .9rem; font-weight: 500; word-break: break-all; }
         .fsize { font-size: .75rem; color: var(--muted); margin-top: 2px; }
-
         .section-label {
             font-size: .7rem; font-weight: 600; text-transform: uppercase;
             letter-spacing: .8px; color: var(--muted); margin: 20px 0 10px;
@@ -171,8 +203,7 @@
             background: var(--card); border: 1px solid var(--border);
             border-radius: 9px; padding: 9px 14px;
             color: var(--text); font-size: .82rem; text-decoration: none;
-            font-family: 'Inter', sans-serif;
-            transition: background .18s, border-color .18s;
+            font-family: 'Inter', sans-serif; transition: background .18s, border-color .18s;
             -webkit-tap-highlight-color: transparent;
         }
         .ext-btn:hover, .ext-btn:active { background: #1e1e3a; border-color: var(--accent); }
@@ -192,13 +223,6 @@
             font-size: .76rem; color: var(--muted);
         }
         footer a { color: var(--accent); text-decoration: none; }
-
-        /* Native subtitle cue — updated by JS */
-        ::cue {
-            font-family: 'Inter', Arial, sans-serif; font-size: 1.05em;
-            color: #fff; background: rgba(0,0,0,0.75);
-            border-radius: 3px; padding: 2px 6px; line-height: 1.5;
-        }
     </style>
     <style id="cueStyle"></style>
 </head>
@@ -214,48 +238,37 @@
 
 <div class="page">
 
-    <div class="video-wrap" id="videoWrap">
+    <!-- ═══════════════════════════════════════
+         CUSTOM PLAYER — no native controls
+         Everything is ours: play, seek, volume,
+         fullscreen, settings. Works in fullscreen
+         because all elements are children of
+         .player-wrap which is the fullscreen target.
+    ═══════════════════════════════════════ -->
+    <div class="player-wrap" id="playerWrap">
 
-        <video id="player"
-               src="{{file_url}}"
-               controls
-               playsinline
-               preload="metadata"
-               width="100%"
-               style="max-height:540px;background:#000;">
-        </video>
+        <!-- The video — no `controls` attribute -->
+        <video id="vid" src="{{file_url}}" preload="metadata" playsinline></video>
 
         <div id="subCanvas"></div>
+        <div class="spinner" id="spinner"></div>
 
-        <!-- Gear button — inside .video-wrap, z-index above video -->
-        <button id="settingsBtn" title="Settings" aria-label="Settings">
-            <i class="fa fa-gear"></i>
-        </button>
-
-        <!-- Settings panel — inside .video-wrap, scrollable -->
+        <!-- Settings panel — child of playerWrap so it's in fullscreen -->
         <div id="settingsPanel">
-
             <div class="sp-title"><i class="fa fa-sliders"></i> Player Settings</div>
 
             <div class="sp-section">
                 <div class="sp-label">🔊 Audio Track</div>
-                <select class="sp-select" id="spAudioSel">
-                    <option value="-1">Detecting…</option>
-                </select>
+                <select class="sp-select" id="spAudioSel"><option value="-1">Detecting…</option></select>
             </div>
-
             <div class="sp-section">
                 <div class="sp-label">💬 Subtitles</div>
-                <select class="sp-select" id="spSubSel">
-                    <option value="-1">Off</option>
-                </select>
+                <select class="sp-select" id="spSubSel"><option value="-1">Off</option></select>
             </div>
-
             <div class="sp-section">
                 <div class="sp-label">🎨 Subtitle Colour</div>
                 <div class="swatch-wrap" id="colorSwatches"></div>
             </div>
-
             <div class="sp-section">
                 <div class="toggle-wrap">
                     <label class="toggle">
@@ -265,7 +278,6 @@
                     Subtitle background
                 </div>
             </div>
-
             <div class="sp-section">
                 <div class="sp-label">🔤 Subtitle Size</div>
                 <div class="sp-slider-row">
@@ -273,24 +285,55 @@
                     <span class="sp-slider-val" id="sizeVal">100%</span>
                 </div>
             </div>
-
             <div class="sp-section">
                 <div class="sp-label">⚡ Speed</div>
                 <select class="sp-select" id="spSpeedSel">
-                    <option value="0.25">0.25×</option>
-                    <option value="0.5">0.5×</option>
-                    <option value="0.75">0.75×</option>
-                    <option value="1" selected>1× Normal</option>
-                    <option value="1.25">1.25×</option>
-                    <option value="1.5">1.5×</option>
-                    <option value="1.75">1.75×</option>
-                    <option value="2">2×</option>
+                    <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+                    <option value="0.75">0.75×</option><option value="1" selected>1× Normal</option>
+                    <option value="1.25">1.25×</option><option value="1.5">1.5×</option>
+                    <option value="1.75">1.75×</option><option value="2">2×</option>
                 </select>
             </div>
+        </div>
 
-        </div><!-- #settingsPanel -->
+        <!-- Custom control bar -->
+        <div class="ctrl-bar" id="ctrlBar">
 
-    </div><!-- .video-wrap -->
+            <!-- Progress -->
+            <div class="prog-row" id="progRow">
+                <div class="prog-buf"  id="progBuf"></div>
+                <div class="prog-fill" id="progFill">
+                    <div class="prog-thumb"></div>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="btn-row">
+                <!-- Rewind 10s -->
+                <button class="cb" id="btnRew" title="Rewind 10s"><i class="fa fa-rotate-left"></i><span style="font-size:.6rem;margin-left:1px;">10</span></button>
+                <!-- Play/Pause -->
+                <button class="cb" id="btnPlay" title="Play/Pause"><i class="fa fa-play" id="playIco"></i></button>
+                <!-- Forward 10s -->
+                <button class="cb" id="btnFwd" title="Forward 10s"><i class="fa fa-rotate-right"></i><span style="font-size:.6rem;margin-left:1px;">10</span></button>
+                <!-- Time -->
+                <span class="time-disp" id="timeDsp">0:00 / 0:00</span>
+
+                <div class="spacer"></div>
+
+                <!-- Volume -->
+                <div class="vol-wrap">
+                    <button class="cb" id="btnMute" title="Mute"><i class="fa fa-volume-high" id="volIco"></i></button>
+                    <input type="range" class="vol-slider" id="volSlider" min="0" max="1" step="0.02" value="1">
+                </div>
+                <!-- Settings gear -->
+                <button class="cb" id="btnSettings" title="Settings"><i class="fa fa-gear"></i></button>
+                <!-- Fullscreen -->
+                <button class="cb" id="btnFs" title="Fullscreen"><i class="fa fa-expand" id="fsIco"></i></button>
+            </div>
+
+        </div><!-- .ctrl-bar -->
+
+    </div><!-- .player-wrap -->
 
     <!-- Below-video panel -->
     <div class="panel">
@@ -307,14 +350,10 @@
         <div class="ctrl-group">
             <label><i class="fa fa-gauge-high"></i> Speed</label>
             <select id="speedSel">
-                <option value="0.25">0.25×</option>
-                <option value="0.5">0.5×</option>
-                <option value="0.75">0.75×</option>
-                <option value="1" selected>1× Normal</option>
-                <option value="1.25">1.25×</option>
-                <option value="1.5">1.5×</option>
-                <option value="1.75">1.75×</option>
-                <option value="2">2×</option>
+                <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option><option value="1" selected>1× Normal</option>
+                <option value="1.25">1.25×</option><option value="1.5">1.5×</option>
+                <option value="1.75">1.75×</option><option value="2">2×</option>
             </select>
         </div>
     </div>
@@ -337,20 +376,30 @@
     <a href="https://telegram.me/TGguy_Ownerobot">Report issue</a><br>
     <span style="margin-top:6px;display:block;">© 2025 · Made by <a href="https://t.me/The_TGguy">Telegram Guy!!</a></span>
 </footer>
-
 <div id="toast"></div>
 
 <script>
-// ── Constants ────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────
 const FILE_URL  = "{{file_url}}";
 const FILE_NAME = "{{file_name}}";
-const _u        = new URL(FILE_URL);
-const MSG_ID    = _u.pathname.split("/").filter(Boolean)[0];
-const HASH      = _u.searchParams.get("hash") || "";
-const BASE      = _u.origin;
+const _u   = new URL(FILE_URL);
+const MSG_ID = _u.pathname.split("/").filter(Boolean)[0];
+const HASH   = _u.searchParams.get("hash") || "";
+const BASE   = _u.origin;
 
-// ── DOM refs ─────────────────────────────────────────────────────────
-const player      = document.getElementById("player");
+// ── DOM ───────────────────────────────────────────────────────────────
+const vid         = document.getElementById("vid");
+const playerWrap  = document.getElementById("playerWrap");
+const spinner     = document.getElementById("spinner");
+const progRow     = document.getElementById("progRow");
+const progFill    = document.getElementById("progFill");
+const progBuf     = document.getElementById("progBuf");
+const timeDsp     = document.getElementById("timeDsp");
+const playIco     = document.getElementById("playIco");
+const volSlider   = document.getElementById("volSlider");
+const volIco      = document.getElementById("volIco");
+const fsIco       = document.getElementById("fsIco");
+const settingsPan = document.getElementById("settingsPanel");
 const audioSel    = document.getElementById("audioSel");
 const audioNote   = document.getElementById("audioNote");
 const subSel      = document.getElementById("subSel");
@@ -360,288 +409,334 @@ const spAudioSel  = document.getElementById("spAudioSel");
 const spSubSel    = document.getElementById("spSubSel");
 const spSpeedSel  = document.getElementById("spSpeedSel");
 const cueStyleEl  = document.getElementById("cueStyle");
-const settingsBtn = document.getElementById("settingsBtn");
-const settingsPan = document.getElementById("settingsPanel");
 
-// ── Settings panel toggle ────────────────────────────────────────────
-settingsBtn.onclick = (e) => {
+// ── Playback ──────────────────────────────────────────────────────────
+function togglePlay() {
+    if (vid.paused || vid.ended) vid.play().catch(()=>{});
+    else vid.pause();
+}
+document.getElementById("btnPlay").onclick = togglePlay;
+vid.onclick = togglePlay;
+
+// Double-tap left/right to skip 10s
+let lastTap = 0, lastTapX = 0;
+vid.addEventListener("touchend", e => {
+    const now = Date.now();
+    if (now - lastTap < 300) {
+        const x = e.changedTouches[0].clientX;
+        const mid = vid.getBoundingClientRect().left + vid.offsetWidth / 2;
+        skip(x < mid ? -10 : 10);
+    }
+    lastTap = now;
+});
+
+vid.addEventListener("play",  () => { playIco.className = "fa fa-pause"; });
+vid.addEventListener("pause", () => { playIco.className = "fa fa-play"; });
+vid.addEventListener("ended", () => { playIco.className = "fa fa-play"; });
+vid.addEventListener("waiting", () => { spinner.style.display = "block"; });
+vid.addEventListener("playing", () => { spinner.style.display = "none"; });
+vid.addEventListener("canplay", () => { spinner.style.display = "none"; });
+
+// Keyboard
+document.addEventListener("keydown", e => {
+    if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+    if (e.code === "Space")      { e.preventDefault(); togglePlay(); }
+    if (e.code === "ArrowRight") skip(10);
+    if (e.code === "ArrowLeft")  skip(-10);
+    if (e.code === "ArrowUp")    { vid.volume = Math.min(1, vid.volume+.1); updateVol(); }
+    if (e.code === "ArrowDown")  { vid.volume = Math.max(0, vid.volume-.1); updateVol(); }
+    if (e.code === "KeyM")       toggleMute();
+    if (e.code === "KeyF")       toggleFs();
+});
+
+function skip(s) { if (isFinite(vid.duration)) vid.currentTime = Math.max(0, Math.min(vid.duration, vid.currentTime + s)); }
+
+// ── Progress ──────────────────────────────────────────────────────────
+vid.addEventListener("timeupdate", () => {
+    if (!isFinite(vid.duration)) return;
+    const p = vid.currentTime / vid.duration;
+    progFill.style.width = (p*100) + "%";
+    timeDsp.textContent  = fmt(vid.currentTime) + " / " + fmt(vid.duration);
+});
+vid.addEventListener("progress", () => {
+    if (!vid.duration) return;
+    for (let i = 0; i < vid.buffered.length; i++) {
+        if (vid.buffered.start(i) <= vid.currentTime)
+            progBuf.style.width = (vid.buffered.end(i)/vid.duration*100)+"%";
+    }
+});
+
+let scrubbing = false;
+function scrubAt(e) {
+    const r = progRow.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX);
+    const ratio = Math.max(0, Math.min(1, (x-r.left)/r.width));
+    if (isFinite(vid.duration)) vid.currentTime = ratio * vid.duration;
+    progFill.style.width = (ratio*100)+"%";
+}
+progRow.addEventListener("mousedown",  e => { scrubbing=true; scrubAt(e); });
+progRow.addEventListener("touchstart", e => { scrubbing=true; scrubAt(e); }, {passive:true});
+document.addEventListener("mousemove", e => { if (scrubbing) scrubAt(e); });
+document.addEventListener("touchmove", e => { if (scrubbing) scrubAt(e); }, {passive:true});
+document.addEventListener("mouseup",   () => scrubbing=false);
+document.addEventListener("touchend",  () => scrubbing=false);
+
+function fmt(s) {
+    s = Math.floor(s||0);
+    const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60;
+    return h ? `${h}:${z(m)}:${z(ss)}` : `${m}:${z(ss)}`;
+}
+function z(n){ return String(n).padStart(2,"0"); }
+
+// ── Volume ────────────────────────────────────────────────────────────
+function updateVol() {
+    volSlider.value = vid.muted ? 0 : vid.volume;
+    volIco.className = vid.muted||vid.volume===0 ? "fa fa-volume-xmark"
+                     : vid.volume < .5            ? "fa fa-volume-low"
+                     :                              "fa fa-volume-high";
+}
+function toggleMute() { vid.muted = !vid.muted; updateVol(); }
+document.getElementById("btnMute").onclick = toggleMute;
+volSlider.oninput = () => { vid.volume = parseFloat(volSlider.value); vid.muted = vid.volume===0; updateVol(); };
+
+// ── Controls auto-hide ────────────────────────────────────────────────
+let hideTimer;
+function showCtrl() {
+    playerWrap.classList.add("show-ctrl");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+        if (!vid.paused) playerWrap.classList.remove("show-ctrl");
+    }, 3500);
+}
+playerWrap.addEventListener("mousemove",  showCtrl);
+playerWrap.addEventListener("touchstart", showCtrl, {passive:true});
+playerWrap.addEventListener("mouseenter", showCtrl);
+vid.addEventListener("pause", () => playerWrap.classList.add("show-ctrl"));
+vid.addEventListener("play",  () => showCtrl());
+showCtrl();
+
+// ── Rewind / Forward buttons ──────────────────────────────────────────
+document.getElementById("btnRew").onclick = (e) => { e.stopPropagation(); skip(-10); };
+document.getElementById("btnFwd").onclick = (e) => { e.stopPropagation(); skip(10); };
+
+// ── Fullscreen — fullscreen the playerWrap so ctrl bar stays visible ──
+function toggleFs() {
+    const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!inFs) {
+        const req = playerWrap.requestFullscreen || playerWrap.webkitRequestFullscreen;
+        if (req) req.call(playerWrap);
+    } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+    }
+}
+document.getElementById("btnFs").onclick = (e) => { e.stopPropagation(); toggleFs(); };
+document.addEventListener("fullscreenchange",       () => { fsIco.className = document.fullscreenElement ? "fa fa-compress" : "fa fa-expand"; });
+document.addEventListener("webkitfullscreenchange", () => { fsIco.className = document.webkitFullscreenElement ? "fa fa-compress" : "fa fa-expand"; });
+
+// ── Settings panel ────────────────────────────────────────────────────
+document.getElementById("btnSettings").onclick = (e) => {
     e.stopPropagation();
     settingsPan.classList.toggle("open");
 };
-document.addEventListener("click", (e) => {
-    if (!settingsPan.contains(e.target) && e.target !== settingsBtn)
+playerWrap.addEventListener("click", (e) => {
+    if (!settingsPan.contains(e.target) && e.target.id !== "btnSettings")
         settingsPan.classList.remove("open");
 });
 
-// ── Speed ────────────────────────────────────────────────────────────
-function setSpeed(v) {
-    player.playbackRate = parseFloat(v);
-    speedSel.value = spSpeedSel.value = v;
-}
+// ── Speed ─────────────────────────────────────────────────────────────
+function setSpeed(v) { vid.playbackRate = parseFloat(v); speedSel.value = spSpeedSel.value = v; }
 speedSel.onchange   = () => setSpeed(speedSel.value);
 spSpeedSel.onchange = () => setSpeed(spSpeedSel.value);
 
-// ── Subtitle appearance ──────────────────────────────────────────────
+// ── Subtitle appearance ───────────────────────────────────────────────
 const SUB_COLORS = [
-    { name:"White",      hex:"#ffffff" },
-    { name:"Yellow",     hex:"#fde047" },
-    { name:"Cyan",       hex:"#67e8f9" },
-    { name:"Green",      hex:"#86efac" },
-    { name:"Orange",     hex:"#fb923c" },
-    { name:"Pink",       hex:"#f9a8d4" },
-    { name:"Red",        hex:"#f87171" },
-    { name:"Light Blue", hex:"#93c5fd" },
+    {name:"White",hex:"#ffffff"},{name:"Yellow",hex:"#fde047"},
+    {name:"Cyan",hex:"#67e8f9"},{name:"Green",hex:"#86efac"},
+    {name:"Orange",hex:"#fb923c"},{name:"Pink",hex:"#f9a8d4"},
+    {name:"Red",hex:"#f87171"},{name:"Light Blue",hex:"#93c5fd"},
 ];
-let subColor = "#ffffff", subBg = true, subSizePct = 105;
-
+let subColor="#ffffff", subBg=true, subSizePct=105;
 function buildColorSwatches() {
     const wrap = document.getElementById("colorSwatches");
     SUB_COLORS.forEach(c => {
         const s = document.createElement("div");
-        s.className = "swatch" + (c.hex === subColor ? " active" : "");
-        s.style.background = c.hex; s.title = c.name;
-        s.onclick = () => {
-            wrap.querySelectorAll(".swatch").forEach(x => x.classList.remove("active"));
-            s.classList.add("active");
-            subColor = c.hex; applyCueStyle();
-        };
+        s.className="swatch"+(c.hex===subColor?" active":"");
+        s.style.background=c.hex; s.title=c.name;
+        s.onclick=()=>{ wrap.querySelectorAll(".swatch").forEach(x=>x.classList.remove("active")); s.classList.add("active"); subColor=c.hex; applyCueStyle(); };
         wrap.appendChild(s);
     });
 }
-
 function applyCueStyle() {
-    const bg   = subBg ? "rgba(0,0,0,0.75)" : "transparent";
-    const pad  = subBg ? "2px 6px" : "0";
-    const size = (subSizePct / 100).toFixed(2) + "em";
-    cueStyleEl.textContent = `::cue{font-family:'Inter',Arial,sans-serif;font-size:${size};color:${subColor};background:${bg};border-radius:${subBg?"3px":"0"};padding:${pad};line-height:1.5;}`;
+    const bg=subBg?"rgba(0,0,0,0.75)":"transparent", pad=subBg?"2px 6px":"0", size=(subSizePct/100).toFixed(2)+"em";
+    cueStyleEl.textContent=`::cue{font-family:'Inter',Arial,sans-serif;font-size:${size};color:${subColor};background:${bg};border-radius:${subBg?"3px":"0"};padding:${pad};line-height:1.5;}`;
 }
+document.getElementById("bgToggle").onchange=function(){subBg=this.checked;applyCueStyle();};
+const sizeSlider=document.getElementById("sizeSlider"), sizeVal=document.getElementById("sizeVal");
+sizeSlider.oninput=()=>{subSizePct=parseInt(sizeSlider.value);sizeVal.textContent=subSizePct+"%";applyCueStyle();};
+buildColorSwatches(); applyCueStyle();
 
-document.getElementById("bgToggle").onchange = function() { subBg = this.checked; applyCueStyle(); };
-const sizeSlider = document.getElementById("sizeSlider");
-const sizeVal    = document.getElementById("sizeVal");
-sizeSlider.oninput = () => { subSizePct = parseInt(sizeSlider.value); sizeVal.textContent = subSizePct + "%"; applyCueStyle(); };
-
-buildColorSwatches();
-applyCueStyle();
-
-// ── External player buttons ──────────────────────────────────────────
-const encName   = encodeURIComponent(FILE_NAME);
-const isAndroid = /android/i.test(navigator.userAgent);
-const isIOS     = /iphone|ipad|ipod/i.test(navigator.userAgent);
-
-function makeBtn(icon, label, href, cls) {
-    const a = document.createElement("a");
-    a.className = "ext-btn" + (cls ? " " + cls : "");
-    a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
-    if (icon.startsWith("http")) {
-        const img = document.createElement("img"); img.src = icon; img.alt = label; a.appendChild(img);
-    } else {
-        const i = document.createElement("i"); i.className = icon; a.appendChild(i);
-    }
-    a.appendChild(document.createTextNode(" " + label));
-    return a;
+// ── External players ──────────────────────────────────────────────────
+const encName=encodeURIComponent(FILE_NAME);
+const isAndroid=/android/i.test(navigator.userAgent);
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+function makeBtn(icon,label,href,cls){
+    const a=document.createElement("a"); a.className="ext-btn"+(cls?" "+cls:"");
+    a.href=href; a.target="_blank"; a.rel="noopener noreferrer";
+    if(icon.startsWith("http")){const img=document.createElement("img");img.src=icon;img.alt=label;a.appendChild(img);}
+    else{const i=document.createElement("i");i.className=icon;a.appendChild(i);}
+    a.appendChild(document.createTextNode(" "+label)); return a;
 }
-
-function buildExternalButtons() {
-    const wrap = document.getElementById("extBtns");
-    if (isAndroid) {
-        wrap.appendChild(makeBtn("https://i.postimg.cc/sx4Msv4T/mx.png",     "MX Player", `intent:${FILE_URL}#Intent;package=com.mxtech.videoplayer.ad;S.title=${encName};end`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png",    "VLC",       `intent:${FILE_URL}#Intent;package=org.videolan.vlc;S.title=${encName};end`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/RVGWYJFF/playit.png", "PLAYit",    `intent:${FILE_URL}#Intent;package=com.playit.videoplayer;S.title=${encName};end`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/wT9tFQ9Z/km.png",     "KM Player", `intent:${FILE_URL}#Intent;package=com.kmplayer;S.title=${encName};end`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png",      "nPlayer",   FILE_URL.replace(/^https?/, "nplayer-https")));
-    } else if (isIOS) {
-        wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png", "VLC",     `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(FILE_URL)}`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png",   "nPlayer", FILE_URL.replace(/^https?/, "nplayer-https")));
+function buildExternalButtons(){
+    const wrap=document.getElementById("extBtns");
+    if(isAndroid){
+        wrap.appendChild(makeBtn("https://i.postimg.cc/sx4Msv4T/mx.png","MX Player",`intent:${FILE_URL}#Intent;package=com.mxtech.videoplayer.ad;S.title=${encName};end`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","VLC",`intent:${FILE_URL}#Intent;package=org.videolan.vlc;S.title=${encName};end`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/RVGWYJFF/playit.png","PLAYit",`intent:${FILE_URL}#Intent;package=com.playit.videoplayer;S.title=${encName};end`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/wT9tFQ9Z/km.png","KM Player",`intent:${FILE_URL}#Intent;package=com.kmplayer;S.title=${encName};end`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png","nPlayer",FILE_URL.replace(/^https?/,"nplayer-https")));
+    } else if(isIOS){
+        wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","VLC",`vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(FILE_URL)}`));
+        wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png","nPlayer",FILE_URL.replace(/^https?/,"nplayer-https")));
     } else {
-        const v = makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png", "Open in VLC", `vlc://${FILE_URL}`);
-        v.target = "_self"; wrap.appendChild(v);
-        const c = makeBtn("fa fa-copy", "Copy URL", "#");
-        c.onclick = e => { e.preventDefault(); navigator.clipboard?.writeText(FILE_URL).then(() => toast("URL copied!")).catch(() => toast("Copy failed")); };
+        const v=makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","Open in VLC",`vlc://${FILE_URL}`); v.target="_self"; wrap.appendChild(v);
+        const c=makeBtn("fa fa-copy","Copy URL","#");
+        c.onclick=e=>{e.preventDefault();navigator.clipboard?.writeText(FILE_URL).then(()=>toast("URL copied!")).catch(()=>toast("Copy failed"));};
         wrap.appendChild(c);
     }
-    wrap.appendChild(makeBtn("fa fa-download", "Download", FILE_URL, "dl"));
+    wrap.appendChild(makeBtn("fa fa-download","Download",FILE_URL,"dl"));
 }
 buildExternalButtons();
 
-// ── Track info ───────────────────────────────────────────────────────
-let subTrackMap    = {};
-let nativeTrackMap = {};
-let activeSubIdx   = -1;
-let octopusInst    = null;
-let _octWkr        = "";
+// ── Track info ────────────────────────────────────────────────────────
+let subTrackMap={}, nativeTrackMap={}, activeSubIdx=-1, octopusInst=null, _octWkr="";
 
-async function loadTrackInfo() {
-    try {
-        const ctrl = new AbortController();
-        const tid  = setTimeout(() => ctrl.abort(), 20000);
-        const res  = await fetch(`${BASE}/info/${MSG_ID}?hash=${HASH}`, { signal: ctrl.signal });
+async function loadTrackInfo(){
+    try{
+        const ctrl=new AbortController(), tid=setTimeout(()=>ctrl.abort(),20000);
+        const res=await fetch(`${BASE}/info/${MSG_ID}?hash=${HASH}`,{signal:ctrl.signal});
         clearTimeout(tid);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        buildAudioUI(data.audio    || []);
-        buildSubUI(data.subtitles  || []);
-    } catch(e) {
-        console.warn("Track info:", e.message);
-        const defA = '<option value="-1">Default</option>';
-        audioSel.innerHTML = spAudioSel.innerHTML = defA;
-        audioNote.textContent = "Could not detect tracks";
-        subSel.innerHTML = spSubSel.innerHTML = '<option value="-1">Off</option>';
-        subNote.textContent = "Could not detect subtitles";
+        if(!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data=await res.json();
+        buildAudioUI(data.audio||[]); buildSubUI(data.subtitles||[]);
+    }catch(e){
+        console.warn("Track info:",e.message);
+        audioSel.innerHTML=spAudioSel.innerHTML='<option value="-1">Default</option>';
+        audioNote.textContent="Could not detect tracks";
+        subSel.innerHTML=spSubSel.innerHTML='<option value="-1">Off</option>';
+        subNote.textContent="Could not detect subtitles";
     }
 }
 
-// ── Audio ────────────────────────────────────────────────────────────
-function buildAudioUI(tracks) {
-    function mkOpts(sel) {
-        sel.innerHTML = "";
-        if (tracks.length <= 1) {
-            const lbl = tracks[0] ? (tracks[0].lang ? `${tracks[0].label} - ${tracks[0].lang}` : tracks[0].label) : "Default";
-            sel.innerHTML = `<option value="-1">${lbl}</option>`;
+// ── Audio ─────────────────────────────────────────────────────────────
+function buildAudioUI(tracks){
+    function mkOpts(sel){
+        sel.innerHTML="";
+        if(tracks.length<=1){
+            const lbl=tracks[0]?(tracks[0].lang?`${tracks[0].label} - ${tracks[0].lang}`:tracks[0].label):"Default";
+            sel.innerHTML=`<option value="-1">${lbl}</option>`;
         } else {
-            tracks.forEach((t, i) => {
-                const o = document.createElement("option");
-                o.value = t.index;
-                o.textContent = t.lang ? `${t.label} - ${t.lang}` : t.label;
-                if (i === 0) o.selected = true;
-                sel.appendChild(o);
+            tracks.forEach((t,i)=>{
+                const o=document.createElement("option"); o.value=t.index;
+                o.textContent=t.lang?`${t.label} - ${t.lang}`:t.label; if(i===0)o.selected=true; sel.appendChild(o);
             });
         }
     }
     mkOpts(audioSel); mkOpts(spAudioSel);
-    audioNote.textContent = tracks.length <= 1 ? "Single audio track" : `${tracks.length} tracks — select to switch`;
-    const onChange = v => { audioSel.value = spAudioSel.value = v; switchAudio(parseInt(v)); };
-    audioSel.onchange   = () => onChange(audioSel.value);
-    spAudioSel.onchange = () => onChange(spAudioSel.value);
+    audioNote.textContent=tracks.length<=1?"Single audio track":`${tracks.length} tracks — select to switch`;
+    const onChange=v=>{audioSel.value=spAudioSel.value=v; switchAudio(parseInt(v));};
+    audioSel.onchange=()=>onChange(audioSel.value); spAudioSel.onchange=()=>onChange(spAudioSel.value);
+}
+function switchAudio(idx){
+    const t=vid.currentTime, playing=!vid.paused;
+    vid.src=idx<0?FILE_URL:`${BASE}/audio/${MSG_ID}/${idx}?hash=${HASH}`;
+    vid.load();
+    vid.addEventListener("loadedmetadata",()=>{ vid.currentTime=t; if(playing)vid.play().catch(()=>{}); if(activeSubIdx>=0)setTimeout(()=>switchSubtitle(activeSubIdx),400); },{once:true});
 }
 
-function switchAudio(idx) {
-    const t = player.currentTime, playing = !player.paused;
-    player.src = idx < 0 ? FILE_URL : `${BASE}/audio/${MSG_ID}/${idx}?hash=${HASH}`;
-    player.load();
-    player.addEventListener("loadedmetadata", () => {
-        player.currentTime = t;
-        if (playing) player.play().catch(() => {});
-        if (activeSubIdx >= 0) setTimeout(() => switchSubtitle(activeSubIdx), 400);
-    }, { once: true });
-}
-
-// ── Subtitles ────────────────────────────────────────────────────────
-function buildSubUI(tracks) {
-    subTrackMap = {};
-    function mkOpts(sel) {
-        sel.innerHTML = '<option value="-1">Off</option>';
-        tracks.forEach(t => {
-            const o = document.createElement("option");
-            o.value = t.index;
-            o.textContent = t.lang ? `${t.label} [${t.lang}]` : t.label;
-            sel.appendChild(o);
-            subTrackMap[t.index] = {
-                url: `${BASE}/sub/${MSG_ID}/${t.index}?hash=${HASH}`,
-                fmt: t.codec || "", label: t.label, lang: t.lang || "und"
-            };
+// ── Subtitles ─────────────────────────────────────────────────────────
+function buildSubUI(tracks){
+    subTrackMap={};
+    function mkOpts(sel){
+        sel.innerHTML='<option value="-1">Off</option>';
+        tracks.forEach(t=>{
+            const o=document.createElement("option"); o.value=t.index;
+            o.textContent=t.lang?`${t.label} [${t.lang}]`:t.label; sel.appendChild(o);
+            subTrackMap[t.index]={url:`${BASE}/sub/${MSG_ID}/${t.index}?hash=${HASH}`,fmt:t.codec||"",label:t.label,lang:t.lang||"und"};
         });
     }
     mkOpts(subSel); mkOpts(spSubSel);
-    subNote.textContent = tracks.length === 0 ? "No subtitles" : `${tracks.length} track${tracks.length > 1 ? "s" : ""} available`;
-    const onChange = v => { subSel.value = spSubSel.value = v; switchSubtitle(parseInt(v)); };
-    subSel.onchange   = () => onChange(subSel.value);
-    spSubSel.onchange = () => onChange(spSubSel.value);
+    subNote.textContent=tracks.length===0?"No subtitles":`${tracks.length} track${tracks.length>1?"s":""} available`;
+    const onChange=v=>{subSel.value=spSubSel.value=v; switchSubtitle(parseInt(v));};
+    subSel.onchange=()=>onChange(subSel.value); spSubSel.onchange=()=>onChange(spSubSel.value);
 }
-
-function clearSubs() {
-    if (octopusInst) { try { octopusInst.dispose(); } catch(e) {} octopusInst = null; }
-    document.getElementById("subCanvas").innerHTML = "";
-    Object.values(nativeTrackMap).forEach(el => { try { el.track.mode = "hidden"; } catch(e) {} });
+function clearSubs(){
+    if(octopusInst){try{octopusInst.dispose();}catch(e){}octopusInst=null;}
+    document.getElementById("subCanvas").innerHTML="";
+    Object.values(nativeTrackMap).forEach(el=>{try{el.track.mode="hidden";}catch(e){}});
 }
-
-async function switchSubtitle(idx) {
-    activeSubIdx = idx; clearSubs();
-    subSel.value = spSubSel.value = String(idx);
-    if (idx < 0 || !subTrackMap[idx]) { subNote.textContent = "Subtitles off"; return; }
-    const info = subTrackMap[idx];
-    subNote.textContent = "Loading…";
-    try {
-        const head = await fetch(info.url, { method: "HEAD" }).catch(() => null);
-        const fmt  = head ? (head.headers.get("X-Subtitle-Format") || info.fmt || "").toLowerCase() : (info.fmt || "").toLowerCase();
+async function switchSubtitle(idx){
+    activeSubIdx=idx; clearSubs(); subSel.value=spSubSel.value=String(idx);
+    if(idx<0||!subTrackMap[idx]){subNote.textContent="Subtitles off";return;}
+    const info=subTrackMap[idx]; subNote.textContent="Loading…";
+    try{
+        const head=await fetch(info.url,{method:"HEAD"}).catch(()=>null);
+        const fmt=head?(head.headers.get("X-Subtitle-Format")||info.fmt||"").toLowerCase():(info.fmt||"").toLowerCase();
         await showVTT(info);
-        subNote.textContent = `▶ ${info.label}${info.lang && info.lang !== "und" ? " [" + info.lang + "]" : ""}`;
-        if (fmt === "ass" || fmt === "ssa") trySubOctopus(info);
-    } catch(e) {
-        console.error("Subtitle error:", e);
-        subNote.textContent = "⚠ " + e.message;
-    }
+        subNote.textContent=`▶ ${info.label}${info.lang&&info.lang!=="und"?" ["+info.lang+"]":""}`;
+        if(fmt==="ass"||fmt==="ssa")trySubOctopus(info);
+    }catch(e){console.error("Subtitle error:",e); subNote.textContent="⚠ "+e.message;}
 }
-
-async function showVTT(info) {
-    const prev = nativeTrackMap[info.index];
-    if (prev && player.contains(prev)) { player.removeChild(prev); delete nativeTrackMap[info.index]; }
-    const el = document.createElement("track");
-    el.kind = "subtitles"; el.label = info.label;
-    el.srclang = info.lang || "und"; el.src = info.url; el.default = false;
-    player.appendChild(el);
-    nativeTrackMap[info.index] = el;
-    await new Promise(resolve => {
-        if (el.readyState === 2) { resolve(); return; }
-        if (el.readyState === 3) {
-            player.removeChild(el);
-            const el2 = document.createElement("track");
-            el2.kind = "subtitles"; el2.label = info.label;
-            el2.srclang = info.lang || "und"; el2.src = info.url + "&_r=" + Date.now();
-            player.appendChild(el2); nativeTrackMap[info.index] = el2;
-            el2.addEventListener("load", resolve, { once: true });
-            el2.addEventListener("error", resolve, { once: true });
-            setTimeout(resolve, 8000); return;
+async function showVTT(info){
+    const prev=nativeTrackMap[info.index];
+    if(prev&&vid.contains(prev)){vid.removeChild(prev);delete nativeTrackMap[info.index];}
+    const el=document.createElement("track"); el.kind="subtitles"; el.label=info.label; el.srclang=info.lang||"und"; el.src=info.url; el.default=false;
+    vid.appendChild(el); nativeTrackMap[info.index]=el;
+    await new Promise(resolve=>{
+        if(el.readyState===2){resolve();return;}
+        if(el.readyState===3){
+            vid.removeChild(el);
+            const el2=document.createElement("track"); el2.kind="subtitles"; el2.label=info.label; el2.srclang=info.lang||"und"; el2.src=info.url+"&_r="+Date.now();
+            vid.appendChild(el2); nativeTrackMap[info.index]=el2;
+            el2.addEventListener("load",resolve,{once:true}); el2.addEventListener("error",resolve,{once:true}); setTimeout(resolve,8000); return;
         }
-        el.addEventListener("load", resolve, { once: true });
-        el.addEventListener("error", resolve, { once: true });
-        setTimeout(resolve, 8000);
+        el.addEventListener("load",resolve,{once:true}); el.addEventListener("error",resolve,{once:true}); setTimeout(resolve,8000);
     });
-    Array.from(player.textTracks).forEach(t => { t.mode = "hidden"; });
-    const active = nativeTrackMap[info.index];
-    if (active?.track) active.track.mode = "showing";
+    Array.from(vid.textTracks).forEach(t=>{t.mode="hidden";});
+    const active=nativeTrackMap[info.index]; if(active?.track)active.track.mode="showing";
 }
-
-async function trySubOctopus(info) {
-    const cdns = [
-        { js:"https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus.js", wk:"https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus-worker.js" },
-        { js:"https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",      wk:"https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
-        { js:"https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",                  wk:"https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js" },
+async function trySubOctopus(info){
+    const cdns=[
+        {js:"https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus.js",wk:"https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus-worker.js"},
+        {js:"https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",wk:"https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js"},
+        {js:"https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",wk:"https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js"},
     ];
-    if (!window.SubtitlesOctopus) {
-        for (const cdn of cdns) {
-            try { await new Promise((ok,fail) => { const s=document.createElement("script"); s.src=cdn.js; s.onload=()=>{_octWkr=cdn.wk;ok();}; s.onerror=fail; document.head.appendChild(s); }); break; }
-            catch(e) { console.warn("SubOctopus CDN failed:", cdn.js); }
+    if(!window.SubtitlesOctopus){
+        for(const cdn of cdns){
+            try{await new Promise((ok,fail)=>{const s=document.createElement("script");s.src=cdn.js;s.onload=()=>{_octWkr=cdn.wk;ok();};s.onerror=fail;document.head.appendChild(s);});break;}
+            catch(e){console.warn("SubOctopus CDN failed:",cdn.js);}
         }
     }
-    if (!window.SubtitlesOctopus) return;
-    try {
-        const res2 = await fetch(info.url); if (!res2.ok) return;
-        const txt2 = await res2.text();
-        const blob = new Blob([txt2], {type:"text/plain"});
-        const burl = URL.createObjectURL(blob);
-        const wrap = document.getElementById("subCanvas");
-        wrap.innerHTML = "";
-        Array.from(player.textTracks).forEach(t => { try{t.mode="hidden";}catch(e){} });
-        octopusInst = new window.SubtitlesOctopus({
-            video:player, subUrl:burl, workerUrl:_octWkr, renderMode:"wasm-blend", targetFps:24,
+    if(!window.SubtitlesOctopus)return;
+    try{
+        const res2=await fetch(info.url);if(!res2.ok)return;
+        const txt2=await res2.text(); const blob=new Blob([txt2],{type:"text/plain"}); const burl=URL.createObjectURL(blob);
+        const wrap=document.getElementById("subCanvas"); wrap.innerHTML="";
+        Array.from(vid.textTracks).forEach(t=>{try{t.mode="hidden";}catch(e){}});
+        octopusInst=new window.SubtitlesOctopus({video:vid,subUrl:burl,workerUrl:_octWkr,renderMode:"wasm-blend",targetFps:24,
             onReady:()=>URL.revokeObjectURL(burl),
-            onError:(e)=>{ URL.revokeObjectURL(burl); if(nativeTrackMap[info.index]?.track) nativeTrackMap[info.index].track.mode="showing"; },
-        });
-        setTimeout(()=>{ const c=document.querySelector(".libassjs-canvas-parent"); if(c){c.style.cssText="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";wrap.appendChild(c);} }, 300);
-    } catch(e) { console.warn("SubOctopus render failed:", e); }
+            onError:(e)=>{URL.revokeObjectURL(burl);if(nativeTrackMap[info.index]?.track)nativeTrackMap[info.index].track.mode="showing";}});
+        setTimeout(()=>{const c=document.querySelector(".libassjs-canvas-parent");if(c){c.style.cssText="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";wrap.appendChild(c);}},300);
+    }catch(e){console.warn("SubOctopus render failed:",e);}
 }
 
-// ── Toast ────────────────────────────────────────────────────────────
+// ── Toast ─────────────────────────────────────────────────────────────
 let _tt;
-function toast(msg) {
-    const el = document.getElementById("toast");
-    el.textContent = msg; el.style.display = "block";
-    clearTimeout(_tt); _tt = setTimeout(() => el.style.display = "none", 5000);
-}
+function toast(msg){const el=document.getElementById("toast");el.textContent=msg;el.style.display="block";clearTimeout(_tt);_tt=setTimeout(()=>el.style.display="none",5000);}
 
-// ── Init ─────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────
 loadTrackInfo();
+showCtrl();
 </script>
 </body>
 </html>
