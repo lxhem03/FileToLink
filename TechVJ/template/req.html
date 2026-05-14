@@ -8,826 +8,529 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossorigin="anonymous"/>
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --accent: #a855f7; --bg: #0a0a0f; --card: #13131f;
-            --border: #1e1e30; --text: #e2e8f0; --muted: #64748b; --radius: 12px;
-        }
-        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        :root{--accent:#a855f7;--bg:#0a0a0f;--card:#13131f;--border:#1e1e30;--text:#e2e8f0;--muted:#64748b;--radius:12px}
+        body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+        nav{position:sticky;top:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:#0c0c16;border-bottom:1px solid var(--border)}
+        .nav-brand{font-size:1.1rem;font-weight:600;color:var(--accent)}
+        .nav-links a{color:var(--muted);text-decoration:none;font-size:.82rem;margin-left:16px}
+        .nav-links a:hover{color:var(--text)}
+        .page{max-width:960px;margin:0 auto;padding:24px 16px 60px}
 
-        nav {
-            position: sticky; top: 0; z-index: 200;
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 24px; background: #0c0c16;
-            border-bottom: 1px solid var(--border);
-        }
-        .nav-brand { font-size: 1.1rem; font-weight: 600; color: var(--accent); }
-        .nav-links a { color: var(--muted); text-decoration: none; font-size: .82rem; margin-left: 16px; }
-        .nav-links a:hover { color: var(--text); }
+        /* ── Custom player ── */
+        .pw{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.8);user-select:none;-webkit-user-select:none}
+        .pw:fullscreen,.pw:-webkit-full-screen{border-radius:0}
+        video#vid{width:100%;max-height:540px;display:block;background:#000;cursor:pointer}
+        .pw:fullscreen video#vid,.pw:-webkit-full-screen video#vid{max-height:100vh;height:100vh}
+        #subCanvas{position:absolute;inset:0;pointer-events:none}
+        .spinner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:none;pointer-events:none}
+        @keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
 
-        .page { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; }
+        /* Control bar */
+        .cb-wrap{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.88) 60%);padding:28px 10px 8px;display:flex;flex-direction:column;gap:5px;opacity:0;transition:opacity .25s;pointer-events:none}
+        .pw.sc .cb-wrap{opacity:1;pointer-events:all}
+        .pw:fullscreen .cb-wrap,.pw:-webkit-full-screen .cb-wrap{padding-bottom:14px}
 
-        /* ═══════════════════════════════════════
-           CUSTOM VIDEO PLAYER
-        ═══════════════════════════════════════ */
-        .player-wrap {
-            position: relative; background: #000;
-            border-radius: var(--radius); overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0,0,0,.8);
-            user-select: none; -webkit-user-select: none;
-        }
-        /* Fullscreen: the whole wrapper fills screen */
-        .player-wrap:fullscreen      { border-radius: 0; }
-        .player-wrap:-webkit-full-screen { border-radius: 0; }
+        /* Progress */
+        .prog{position:relative;height:4px;background:rgba(255,255,255,.2);border-radius:4px;cursor:pointer;transition:height .15s;margin-bottom:2px}
+        .prog:hover{height:6px}
+        .prog-buf{position:absolute;inset:0;background:rgba(255,255,255,.18);border-radius:4px;width:0}
+        .prog-fill{position:absolute;inset:0;background:var(--accent);border-radius:4px;width:0}
+        .prog-thumb{position:absolute;top:50%;right:-6px;transform:translateY(-50%);width:13px;height:13px;border-radius:50%;background:#fff;transition:transform .15s}
+        .prog:hover .prog-thumb{transform:translateY(-50%) scale(1.3)}
 
-        video#vid {
-            width: 100%; max-height: 540px;
-            display: block; background: #000; cursor: pointer;
-        }
-        .player-wrap:fullscreen video#vid,
-        .player-wrap:-webkit-full-screen video#vid { max-height: 100vh; height: 100vh; }
+        /* Btn row */
+        .br{display:flex;align-items:center;gap:2px}
+        .cb{background:none;border:none;color:#fff;cursor:pointer;padding:6px 7px;border-radius:6px;font-size:.85rem;display:flex;align-items:center;gap:2px;transition:background .15s;-webkit-tap-highlight-color:transparent}
+        .cb:hover{background:rgba(255,255,255,.12)}
+        .td{font-size:.75rem;color:rgba(255,255,255,.85);white-space:nowrap;margin:0 4px}
+        .sp{flex:1}
+        .vw{display:flex;align-items:center;gap:4px}
+        .vs{-webkit-appearance:none;appearance:none;width:64px;height:3px;border-radius:3px;outline:none;background:rgba(255,255,255,.3);cursor:pointer}
+        .vs::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:#fff}
 
-        /* subtitle canvas */
-        #subCanvas { position: absolute; inset: 0; pointer-events: none; }
+        /* Settings panel */
+        #sp{position:absolute;bottom:56px;right:8px;z-index:50;background:rgba(10,10,20,.97);border:1px solid rgba(168,85,247,.4);border-radius:12px;padding:12px 14px;width:264px;max-width:calc(100vw - 20px);max-height:56vh;overflow-y:auto;overflow-x:hidden;display:none;flex-direction:column;gap:12px;box-shadow:0 6px 32px rgba(0,0,0,.85);scrollbar-width:thin;scrollbar-color:rgba(168,85,247,.35) transparent}
+        #sp::-webkit-scrollbar{width:3px}
+        #sp::-webkit-scrollbar-thumb{background:rgba(168,85,247,.4);border-radius:3px}
+        #sp.open{display:flex}
+        .sp-t{font-size:.68rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid rgba(168,85,247,.2);padding-bottom:7px}
+        .sp-s{display:flex;flex-direction:column;gap:6px}
+        .sp-l{font-size:.68rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.7px}
+        .sp-sel{background:rgba(25,25,45,.95);color:#e2e8f0;border:1px solid rgba(100,100,180,.3);border-radius:7px;padding:6px 8px;font-size:.80rem;cursor:pointer;outline:none;font-family:'Inter',sans-serif;width:100%}
+        .sp-sel:focus{border-color:var(--accent)}
+        .sw-w{display:flex;gap:5px;flex-wrap:wrap}
+        .sw{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .12s,transform .12s}
+        .sw.active,.sw:hover{border-color:#fff;transform:scale(1.18)}
+        .tg-w{display:flex;align-items:center;gap:8px;font-size:.80rem;color:#cbd5e1}
+        .tg{position:relative;width:36px;height:20px;flex-shrink:0}
+        .tg input{opacity:0;width:0;height:0}
+        .tg-s{position:absolute;inset:0;background:#334155;border-radius:20px;cursor:pointer;transition:background .18s}
+        .tg-s:before{content:"";position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:3px;left:3px;transition:transform .18s}
+        .tg input:checked+.tg-s{background:var(--accent)}
+        .tg input:checked+.tg-s:before{transform:translateX(16px)}
+        .sl-r{display:flex;align-items:center;gap:8px}
+        .sl{width:100%;accent-color:var(--accent);cursor:pointer}
+        .sl-v{font-size:.74rem;color:#94a3b8;min-width:34px;text-align:right}
 
-        /* ── Spinner ── */
-        .spinner {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%,-50%);
-            width: 44px; height: 44px;
-            border: 3px solid rgba(255,255,255,.15);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin .7s linear infinite;
-            display: none; pointer-events: none;
-        }
-        @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+        /* Below-video panel */
+        .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-top:14px;display:flex;gap:16px;flex-wrap:wrap}
+        .cg{display:flex;flex-direction:column;gap:7px;flex:1;min-width:150px}
+        .cg label{font-size:.7rem;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:5px}
+        .cg select{background:#1a1a2e;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.85rem;cursor:pointer;outline:none;font-family:'Inter',sans-serif;width:100%}
+        .cg select:focus{border-color:var(--accent)}
+        .cn{font-size:.72rem;color:var(--muted);min-height:1em}
 
-        /* ── Controls bar ── */
-        .ctrl-bar {
-            position: absolute; bottom: 0; left: 0; right: 0;
-            background: linear-gradient(transparent, rgba(0,0,0,.85) 60%);
-            padding: 28px 10px 8px;
-            display: flex; flex-direction: column; gap: 5px;
-            opacity: 0; transition: opacity .25s;
-            pointer-events: none;
-        }
-        .player-wrap.show-ctrl .ctrl-bar { opacity: 1; pointer-events: all; }
-        .player-wrap:fullscreen .ctrl-bar,
-        .player-wrap:-webkit-full-screen .ctrl-bar { padding-bottom: 14px; }
-
-        /* Progress row */
-        .prog-row { position: relative; height: 4px; background: rgba(255,255,255,.2); border-radius: 4px; cursor: pointer; transition: height .15s; }
-        .prog-row:hover { height: 6px; }
-        .prog-buf  { position: absolute; inset: 0; background: rgba(255,255,255,.18); border-radius: 4px; width: 0; }
-        .prog-fill { position: absolute; inset: 0; background: var(--accent); border-radius: 4px; width: 0; }
-        .prog-thumb {
-            position: absolute; top: 50%; right: -6px;
-            transform: translateY(-50%); width: 13px; height: 13px;
-            border-radius: 50%; background: #fff; transition: transform .15s;
-        }
-        .prog-row:hover .prog-thumb { transform: translateY(-50%) scale(1.3); }
-
-        /* Buttons row */
-        .btn-row { display: flex; align-items: center; gap: 2px; }
-        .cb {
-            background: none; border: none; color: #fff;
-            cursor: pointer; padding: 6px 7px; border-radius: 6px;
-            font-size: .85rem; display: flex; align-items: center;
-            transition: background .15s; -webkit-tap-highlight-color: transparent;
-        }
-        .cb:hover { background: rgba(255,255,255,.12); }
-        .time-disp { font-size: .75rem; color: rgba(255,255,255,.85); white-space: nowrap; margin: 0 4px; }
-        .spacer { flex: 1; }
-        .vol-wrap { display: flex; align-items: center; gap: 4px; }
-        .vol-slider {
-            -webkit-appearance: none; appearance: none;
-            width: 64px; height: 3px; border-radius: 3px; outline: none;
-            background: rgba(255,255,255,.3); cursor: pointer;
-        }
-        .vol-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
-
-        /* ── Settings panel — inside .player-wrap so it works in fullscreen ── */
-        #settingsPanel {
-            position: absolute; bottom: 56px; right: 8px;
-            z-index: 50;
-            background: rgba(10,10,20,0.97);
-            border: 1px solid rgba(168,85,247,.4);
-            border-radius: 12px; padding: 12px 14px;
-            width: 264px; max-width: calc(100vw - 20px);
-            max-height: 56vh; overflow-y: auto; overflow-x: hidden;
-            display: none; flex-direction: column; gap: 12px;
-            box-shadow: 0 6px 32px rgba(0,0,0,.85);
-            scrollbar-width: thin;
-            scrollbar-color: rgba(168,85,247,.35) transparent;
-        }
-        #settingsPanel::-webkit-scrollbar { width: 3px; }
-        #settingsPanel::-webkit-scrollbar-thumb { background: rgba(168,85,247,.4); border-radius: 3px; }
-        #settingsPanel.open { display: flex; }
-
-        .sp-title {
-            font-size: .68rem; font-weight: 700; letter-spacing: 1px;
-            text-transform: uppercase; color: var(--accent);
-            border-bottom: 1px solid rgba(168,85,247,.2); padding-bottom: 7px;
-        }
-        .sp-section { display: flex; flex-direction: column; gap: 6px; }
-        .sp-label { font-size: .68rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .7px; }
-        .sp-select {
-            background: rgba(25,25,45,.95); color: #e2e8f0;
-            border: 1px solid rgba(100,100,180,.3); border-radius: 7px;
-            padding: 6px 8px; font-size: .80rem; cursor: pointer; outline: none;
-            font-family: 'Inter', sans-serif; width: 100%;
-        }
-        .sp-select:focus { border-color: var(--accent); }
-        .swatch-wrap { display: flex; gap: 5px; flex-wrap: wrap; }
-        .swatch {
-            width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
-            border: 2px solid transparent; transition: border-color .12s, transform .12s;
-        }
-        .swatch.active, .swatch:hover { border-color: #fff; transform: scale(1.18); }
-        .toggle-wrap { display: flex; align-items: center; gap: 8px; font-size: .80rem; color: #cbd5e1; }
-        .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
-        .toggle input { opacity: 0; width: 0; height: 0; }
-        .toggle-slider { position: absolute; inset: 0; background: #334155; border-radius: 20px; cursor: pointer; transition: background .18s; }
-        .toggle-slider:before { content:""; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: transform .18s; }
-        .toggle input:checked + .toggle-slider { background: var(--accent); }
-        .toggle input:checked + .toggle-slider:before { transform: translateX(16px); }
-        .sp-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
-        .sp-slider-row { display: flex; align-items: center; gap: 8px; }
-        .sp-slider-val { font-size: .74rem; color: #94a3b8; min-width: 34px; text-align: right; }
-
-        /* ── ::cue ── */
-        #cueStyle {}
-        ::cue {
-            font-family: 'Inter', Arial, sans-serif; font-size: 1.05em;
-            color: #fff; background: rgba(0,0,0,.75);
-            border-radius: 3px; padding: 2px 6px; line-height: 1.5;
-        }
-
-        /* ── Below-video panel ── */
-        .panel {
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 18px 20px;
-            margin-top: 14px; display: flex; gap: 16px; flex-wrap: wrap;
-        }
-        .ctrl-group { display: flex; flex-direction: column; gap: 7px; flex: 1; min-width: 150px; }
-        .ctrl-group label {
-            font-size: .7rem; font-weight: 600; letter-spacing: .8px;
-            text-transform: uppercase; color: var(--muted);
-            display: flex; align-items: center; gap: 5px;
-        }
-        .ctrl-group select {
-            background: #1a1a2e; color: var(--text);
-            border: 1px solid var(--border); border-radius: 8px;
-            padding: 8px 10px; font-size: .85rem; cursor: pointer; outline: none;
-            font-family: 'Inter', sans-serif; width: 100%;
-        }
-        .ctrl-group select:focus { border-color: var(--accent); }
-        .ctrl-note { font-size: .72rem; color: var(--muted); min-height: 1em; }
-
-        .file-info {
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 14px 18px; margin-top: 14px;
-            display: flex; align-items: center; gap: 12px;
-        }
-        .file-icon { font-size: 1.4rem; color: var(--accent); flex-shrink: 0; }
-        .fname { font-size: .9rem; font-weight: 500; word-break: break-all; }
-        .fsize { font-size: .75rem; color: var(--muted); margin-top: 2px; }
-        .section-label {
-            font-size: .7rem; font-weight: 600; text-transform: uppercase;
-            letter-spacing: .8px; color: var(--muted); margin: 20px 0 10px;
-        }
-        .ext-btns { display: flex; flex-wrap: wrap; gap: 10px; }
-        .ext-btn {
-            display: flex; align-items: center; gap: 8px;
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: 9px; padding: 9px 14px;
-            color: var(--text); font-size: .82rem; text-decoration: none;
-            font-family: 'Inter', sans-serif; transition: background .18s, border-color .18s;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .ext-btn:hover, .ext-btn:active { background: #1e1e3a; border-color: var(--accent); }
-        .ext-btn img { width: 24px; height: 24px; object-fit: contain; border-radius: 4px; }
-        .ext-btn.dl { background: #0f2a1f; border-color: #1a4a30; }
-        .ext-btn.dl:hover { background: #163a2a; border-color: #2a6a40; }
-
-        #toast {
-            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-            background: #1e1e3a; color: #eee; padding: 10px 20px;
-            border-radius: 8px; font-size: .82rem; border: 1px solid var(--accent);
-            z-index: 9999; display: none; text-align: center; max-width: 88vw;
-        }
-        footer {
-            text-align: center; padding: 28px 16px;
-            border-top: 1px solid var(--border); margin-top: 48px;
-            font-size: .76rem; color: var(--muted);
-        }
-        footer a { color: var(--accent); text-decoration: none; }
+        .fi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-top:14px;display:flex;align-items:center;gap:12px}
+        .fi-ic{font-size:1.4rem;color:var(--accent);flex-shrink:0}
+        .fname{font-size:.9rem;font-weight:500;word-break:break-all}
+        .fsize{font-size:.75rem;color:var(--muted);margin-top:2px}
+        .sl-lbl{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:20px 0 10px}
+        .eb-wrap{display:flex;flex-wrap:wrap;gap:10px}
+        .eb{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px 14px;color:var(--text);font-size:.82rem;text-decoration:none;font-family:'Inter',sans-serif;transition:background .18s,border-color .18s;-webkit-tap-highlight-color:transparent}
+        .eb:hover,.eb:active{background:#1e1e3a;border-color:var(--accent)}
+        .eb img{width:24px;height:24px;object-fit:contain;border-radius:4px}
+        .eb.dl{background:#0f2a1f;border-color:#1a4a30}
+        .eb.dl:hover{background:#163a2a;border-color:#2a6a40}
+        #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e1e3a;color:#eee;padding:10px 20px;border-radius:8px;font-size:.82rem;border:1px solid var(--accent);z-index:9999;display:none;text-align:center;max-width:88vw}
+        footer{text-align:center;padding:28px 16px;border-top:1px solid var(--border);margin-top:48px;font-size:.76rem;color:var(--muted)}
+        footer a{color:var(--accent);text-decoration:none}
+        ::cue{font-family:'Inter',Arial,sans-serif;font-size:1.05em;color:#fff;background:rgba(0,0,0,.75);border-radius:3px;padding:2px 6px;line-height:1.5}
     </style>
     <style id="cueStyle"></style>
 </head>
 <body>
-
 <nav>
     <span class="nav-brand">Telegram Guy!!</span>
-    <div class="nav-links">
-        <a href="https://t.me/The_TGguy">Updates</a>
-        <a href="https://telegram.me/TGguy_Ownerobot">Support</a>
-    </div>
+    <div class="nav-links"><a href="https://t.me/The_TGguy">Updates</a><a href="https://telegram.me/TGguy_Ownerobot">Support</a></div>
 </nav>
-
 <div class="page">
 
-    <!-- ═══════════════════════════════════════
-         CUSTOM PLAYER — no native controls
-         Everything is ours: play, seek, volume,
-         fullscreen, settings. Works in fullscreen
-         because all elements are children of
-         .player-wrap which is the fullscreen target.
-    ═══════════════════════════════════════ -->
-    <div class="player-wrap" id="playerWrap">
-
-        <!-- The video — no `controls` attribute -->
+    <div class="pw" id="pw">
         <video id="vid" src="{{file_url}}" preload="metadata" playsinline></video>
-
         <div id="subCanvas"></div>
-        <div class="spinner" id="spinner"></div>
+        <div class="spinner" id="spin"></div>
 
-        <!-- Settings panel — child of playerWrap so it's in fullscreen -->
-        <div id="settingsPanel">
-            <div class="sp-title"><i class="fa fa-sliders"></i> Player Settings</div>
-
-            <div class="sp-section">
-                <div class="sp-label">🔊 Audio Track</div>
-                <select class="sp-select" id="spAudioSel"><option value="-1">Detecting…</option></select>
-            </div>
-            <div class="sp-section">
-                <div class="sp-label">💬 Subtitles</div>
-                <select class="sp-select" id="spSubSel"><option value="-1">Off</option></select>
-            </div>
-            <div class="sp-section">
-                <div class="sp-label">🎨 Subtitle Colour</div>
-                <div class="swatch-wrap" id="colorSwatches"></div>
-            </div>
-            <div class="sp-section">
-                <div class="toggle-wrap">
-                    <label class="toggle">
-                        <input type="checkbox" id="bgToggle" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    Subtitle background
-                </div>
-            </div>
-            <div class="sp-section">
-                <div class="sp-label">🔤 Subtitle Size</div>
-                <div class="sp-slider-row">
-                    <input type="range" class="sp-slider" id="sizeSlider" min="60" max="200" value="105" step="5">
-                    <span class="sp-slider-val" id="sizeVal">100%</span>
-                </div>
-            </div>
-            <div class="sp-section">
-                <div class="sp-label">⚡ Speed</div>
-                <select class="sp-select" id="spSpeedSel">
-                    <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
-                    <option value="0.75">0.75×</option><option value="1" selected>1× Normal</option>
-                    <option value="1.25">1.25×</option><option value="1.5">1.5×</option>
-                    <option value="1.75">1.75×</option><option value="2">2×</option>
+        <!-- Settings panel inside player — visible in fullscreen -->
+        <div id="sp">
+            <div class="sp-t"><i class="fa fa-sliders"></i> Player Settings</div>
+            <div class="sp-s"><div class="sp-l">🔊 Audio Track</div><select class="sp-sel" id="spAs"><option value="-1">Detecting…</option></select></div>
+            <div class="sp-s"><div class="sp-l">💬 Subtitles</div><select class="sp-sel" id="spSs"><option value="-1">Off</option></select></div>
+            <div class="sp-s"><div class="sp-l">🎨 Subtitle Colour</div><div class="sw-w" id="swatches"></div></div>
+            <div class="sp-s"><div class="tg-w"><label class="tg"><input type="checkbox" id="bgTgl" checked><span class="tg-s"></span></label>Subtitle background</div></div>
+            <div class="sp-s"><div class="sp-l">🔤 Subtitle Size</div><div class="sl-r"><input type="range" class="sl" id="szSl" min="60" max="200" value="105" step="5"><span class="sl-v" id="szV">100%</span></div></div>
+            <div class="sp-s"><div class="sp-l">⚡ Speed</div>
+                <select class="sp-sel" id="spSpd">
+                    <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+                    <option value="1" selected>1× Normal</option><option value="1.25">1.25×</option>
+                    <option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
                 </select>
             </div>
         </div>
 
         <!-- Custom control bar -->
-        <div class="ctrl-bar" id="ctrlBar">
-
-            <!-- Progress -->
-            <div class="prog-row" id="progRow">
-                <div class="prog-buf"  id="progBuf"></div>
-                <div class="prog-fill" id="progFill">
-                    <div class="prog-thumb"></div>
-                </div>
+        <div class="cb-wrap" id="cbw">
+            <div class="prog" id="prog"><div class="prog-buf" id="pb"></div><div class="prog-fill" id="pf"><div class="prog-thumb"></div></div></div>
+            <div class="br">
+                <button class="cb" id="bRew" title="Rewind 10s"><i class="fa fa-rotate-left"></i><span style="font-size:.6rem">10</span></button>
+                <button class="cb" id="bPl" title="Play/Pause"><i class="fa fa-play" id="pIco"></i></button>
+                <button class="cb" id="bFwd" title="Forward 10s"><i class="fa fa-rotate-right"></i><span style="font-size:.6rem">10</span></button>
+                <span class="td" id="td">0:00 / 0:00</span>
+                <div class="sp"></div>
+                <div class="vw"><button class="cb" id="bMu" title="Mute"><i class="fa fa-volume-high" id="vIco"></i></button><input type="range" class="vs" id="vs" min="0" max="1" step="0.02" value="1"></div>
+                <button class="cb" id="bSet" title="Settings"><i class="fa fa-gear"></i></button>
+                <button class="cb" id="bFs" title="Fullscreen"><i class="fa fa-expand" id="fsI"></i></button>
             </div>
-
-            <!-- Buttons -->
-            <div class="btn-row">
-                <!-- Rewind 10s -->
-                <button class="cb" id="btnRew" title="Rewind 10s"><i class="fa fa-rotate-left"></i><span style="font-size:.6rem;margin-left:1px;">10</span></button>
-                <!-- Play/Pause -->
-                <button class="cb" id="btnPlay" title="Play/Pause"><i class="fa fa-play" id="playIco"></i></button>
-                <!-- Forward 10s -->
-                <button class="cb" id="btnFwd" title="Forward 10s"><i class="fa fa-rotate-right"></i><span style="font-size:.6rem;margin-left:1px;">10</span></button>
-                <!-- Time -->
-                <span class="time-disp" id="timeDsp">0:00 / 0:00</span>
-
-                <div class="spacer"></div>
-
-                <!-- Volume -->
-                <div class="vol-wrap">
-                    <button class="cb" id="btnMute" title="Mute"><i class="fa fa-volume-high" id="volIco"></i></button>
-                    <input type="range" class="vol-slider" id="volSlider" min="0" max="1" step="0.02" value="1">
-                </div>
-                <!-- Settings gear -->
-                <button class="cb" id="btnSettings" title="Settings"><i class="fa fa-gear"></i></button>
-                <!-- Fullscreen -->
-                <button class="cb" id="btnFs" title="Fullscreen"><i class="fa fa-expand" id="fsIco"></i></button>
-            </div>
-
-        </div><!-- .ctrl-bar -->
-
-    </div><!-- .player-wrap -->
+        </div>
+    </div>
 
     <!-- Below-video panel -->
     <div class="panel">
-        <div class="ctrl-group">
-            <label><i class="fa fa-music"></i> Audio Track</label>
-            <select id="audioSel"><option value="-1">Detecting…</option></select>
-            <div class="ctrl-note" id="audioNote"></div>
-        </div>
-        <div class="ctrl-group">
-            <label><i class="fa fa-closed-captioning"></i> Subtitles</label>
-            <select id="subSel"><option value="-1">Off</option></select>
-            <div class="ctrl-note" id="subNote">Detecting…</div>
-        </div>
-        <div class="ctrl-group">
-            <label><i class="fa fa-gauge-high"></i> Speed</label>
-            <select id="speedSel">
-                <option value="0.25">0.25×</option><option value="0.5">0.5×</option>
-                <option value="0.75">0.75×</option><option value="1" selected>1× Normal</option>
-                <option value="1.25">1.25×</option><option value="1.5">1.5×</option>
-                <option value="1.75">1.75×</option><option value="2">2×</option>
+        <div class="cg"><label><i class="fa fa-music"></i> Audio Track</label><select id="asSel"><option value="-1">Detecting…</option></select><div class="cn" id="aN"></div></div>
+        <div class="cg"><label><i class="fa fa-closed-captioning"></i> Subtitles</label><select id="ssSel"><option value="-1">Off</option></select><div class="cn" id="sN">Detecting…</div></div>
+        <div class="cg"><label><i class="fa fa-gauge-high"></i> Speed</label>
+            <select id="spdSel">
+                <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+                <option value="1" selected>1× Normal</option><option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option>
             </select>
         </div>
     </div>
 
-    <div class="file-info">
-        <div class="file-icon"><i class="fa fa-file-video"></i></div>
-        <div>
-            <div class="fname">{{file_name}}</div>
-            <div class="fsize">{{file_size}}</div>
-        </div>
-    </div>
-
-    <div class="section-label">Open in external player</div>
-    <div class="ext-btns" id="extBtns"></div>
-
+    <div class="fi"><div class="fi-ic"><i class="fa fa-file-video"></i></div><div><div class="fname">{{file_name}}</div><div class="fsize">{{file_size}}</div></div></div>
+    <div class="sl-lbl">Open in external player</div>
+    <div class="eb-wrap" id="ebs"></div>
 </div>
 
-<footer>
-    Stream/download links via <a href="https://t.me/FilesXstreamerobot">FileXStreamer</a> bot ·
-    <a href="https://telegram.me/TGguy_Ownerobot">Report issue</a><br>
-    <span style="margin-top:6px;display:block;">© 2025 · Made by <a href="https://t.me/The_TGguy">Telegram Guy!!</a></span>
-</footer>
+<footer>Stream/download links via <a href="https://t.me/FilesXstreamerobot">FileXStreamer</a> bot · <a href="https://telegram.me/TGguy_Ownerobot">Report issue</a><br><span style="margin-top:6px;display:block">© 2025 · Made by <a href="https://t.me/The_TGguy">Telegram Guy!!</a></span></footer>
 <div id="toast"></div>
 
 <script>
-// ── Constants ─────────────────────────────────────────────────────────
-const FILE_URL  = "{{file_url}}";
-const FILE_NAME = "{{file_name}}";
-const _u   = new URL(FILE_URL);
-const MSG_ID = _u.pathname.split("/").filter(Boolean)[0];
-const HASH   = _u.searchParams.get("hash") || "";
-const BASE   = _u.origin;
+const FILE_URL = "{{file_url}}";
+const FILE_NAME= "{{file_name}}";
+const _u  = new URL(FILE_URL);
+const MID = _u.pathname.split("/").filter(Boolean)[0];
+const HSH = _u.searchParams.get("hash")||"";
+const BAS = _u.origin;
 
-// ── DOM ───────────────────────────────────────────────────────────────
-const vid         = document.getElementById("vid");
-const playerWrap  = document.getElementById("playerWrap");
-const spinner     = document.getElementById("spinner");
-const progRow     = document.getElementById("progRow");
-const progFill    = document.getElementById("progFill");
-const progBuf     = document.getElementById("progBuf");
-const timeDsp     = document.getElementById("timeDsp");
-const playIco     = document.getElementById("playIco");
-const volSlider   = document.getElementById("volSlider");
-const volIco      = document.getElementById("volIco");
-const fsIco       = document.getElementById("fsIco");
-const settingsPan = document.getElementById("settingsPanel");
-const audioSel    = document.getElementById("audioSel");
-const audioNote   = document.getElementById("audioNote");
-const subSel      = document.getElementById("subSel");
-const subNote     = document.getElementById("subNote");
-const speedSel    = document.getElementById("speedSel");
-const spAudioSel  = document.getElementById("spAudioSel");
-const spSubSel    = document.getElementById("spSubSel");
-const spSpeedSel  = document.getElementById("spSpeedSel");
-const cueStyleEl  = document.getElementById("cueStyle");
+const vid  = document.getElementById("vid");
+const pw   = document.getElementById("pw");
+const spEl = document.getElementById("spin");
+const prog = document.getElementById("prog");
+const pf   = document.getElementById("pf");
+const pb   = document.getElementById("pb");
+const td   = document.getElementById("td");
+const pIco = document.getElementById("pIco");
+const vIco = document.getElementById("vIco");
+const fsI  = document.getElementById("fsI");
+const vs   = document.getElementById("vs");
+const panel= document.getElementById("sp");
+const asSel= document.getElementById("asSel");
+const aN   = document.getElementById("aN");
+const ssSel= document.getElementById("ssSel");
+const sN   = document.getElementById("sN");
+const spdSel=document.getElementById("spdSel");
+const spAs = document.getElementById("spAs");
+const spSs = document.getElementById("spSs");
+const spSpd= document.getElementById("spSpd");
+const cueEl= document.getElementById("cueStyle");
 
 // ── Playback ──────────────────────────────────────────────────────────
-function togglePlay() {
-    if (vid.paused || vid.ended) vid.play().catch(()=>{});
-    else vid.pause();
-}
-document.getElementById("btnPlay").onclick = togglePlay;
-// vid.onclick intentionally removed — user pauses via control bar only
+function togglePlay(){vid.paused||vid.ended?vid.play().catch(()=>{}):vid.pause()}
+document.getElementById("bPl").onclick=togglePlay;
 
-// Double-tap left/right to skip 10s (mobile)
-// Single tap shows/hides controls — does NOT pause (user uses control bar for that)
-let lastTap = 0;
-vid.addEventListener("touchend", e => {
-    const now = Date.now();
-    const dt  = now - lastTap;
-    lastTap   = now;
-    if (dt < 300 && dt > 0) {
-        // Double tap — skip
-        e.preventDefault(); // prevent any default browser action
-        const x   = e.changedTouches[0].clientX;
-        const mid = vid.getBoundingClientRect().left + vid.offsetWidth / 2;
-        skip(x < mid ? -10 : 10);
-    } else {
-        // Single tap — just show/refresh controls
-        showCtrl();
-    }
+vid.addEventListener("play",  ()=>{pIco.className="fa fa-pause"; showCtrl()});
+vid.addEventListener("pause", ()=>{pIco.className="fa fa-play"; pw.classList.add("sc")});
+vid.addEventListener("ended", ()=>{pIco.className="fa fa-play"});
+vid.addEventListener("waiting",()=>{spEl.style.display="block"});
+vid.addEventListener("playing",()=>{spEl.style.display="none"});
+vid.addEventListener("canplay",()=>{spEl.style.display="none"});
+
+// Double-tap skip, single-tap show controls
+let _lt=0;
+vid.addEventListener("touchend", e=>{
+    const now=Date.now(), dt=now-_lt; _lt=now;
+    if(dt<300&&dt>0){
+        e.preventDefault();
+        const x=e.changedTouches[0].clientX;
+        const mid=vid.getBoundingClientRect().left+vid.offsetWidth/2;
+        skip(x<mid?-10:10);
+    } else { showCtrl(); }
 });
-
-vid.addEventListener("play",  () => { playIco.className = "fa fa-pause"; });
-vid.addEventListener("pause", () => { playIco.className = "fa fa-play"; });
-vid.addEventListener("ended", () => { playIco.className = "fa fa-play"; });
-vid.addEventListener("waiting", () => { spinner.style.display = "block"; });
-vid.addEventListener("playing", () => { spinner.style.display = "none"; });
-vid.addEventListener("canplay", () => { spinner.style.display = "none"; });
 
 // Keyboard
-document.addEventListener("keydown", e => {
-    if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
-    if (e.code === "Space")      { e.preventDefault(); togglePlay(); }
-    if (e.code === "ArrowRight") skip(10);
-    if (e.code === "ArrowLeft")  skip(-10);
-    if (e.code === "ArrowUp")    { vid.volume = Math.min(1, vid.volume+.1); updateVol(); }
-    if (e.code === "ArrowDown")  { vid.volume = Math.max(0, vid.volume-.1); updateVol(); }
-    if (e.code === "KeyM")       toggleMute();
-    if (e.code === "KeyF")       toggleFs();
+document.addEventListener("keydown",e=>{
+    if(e.target.tagName==="SELECT"||e.target.tagName==="INPUT")return;
+    if(e.code==="Space"){e.preventDefault();togglePlay()}
+    if(e.code==="ArrowRight")skip(10);
+    if(e.code==="ArrowLeft")skip(-10);
+    if(e.code==="ArrowUp"){vid.volume=Math.min(1,vid.volume+.1);updateVol()}
+    if(e.code==="ArrowDown"){vid.volume=Math.max(0,vid.volume-.1);updateVol()}
+    if(e.code==="KeyM")toggleMute();
+    if(e.code==="KeyF")toggleFs();
 });
 
-function skip(s) {
-    const cur = vid.currentTime;
-    const dur = vid.duration;
-    // Allow seeking even if duration is Infinity (streaming) or NaN (not yet loaded)
-    // Just clamp to 0 on the lower bound; upper bound only if duration is finite
-    const next = cur + s;
-    if (next < 0) { vid.currentTime = 0; return; }
-    if (isFinite(dur) && next > dur) { vid.currentTime = dur; return; }
-    vid.currentTime = next;
+function skip(s){
+    const next=vid.currentTime+s;
+    if(next<0){vid.currentTime=0;return}
+    if(isFinite(vid.duration)&&next>vid.duration){vid.currentTime=vid.duration;return}
+    vid.currentTime=next;
 }
+
+document.getElementById("bRew").onclick=e=>{e.stopPropagation();skip(-10)};
+document.getElementById("bFwd").onclick=e=>{e.stopPropagation();skip(10)};
 
 // ── Progress ──────────────────────────────────────────────────────────
-vid.addEventListener("timeupdate", () => {
-    const cur = vid.currentTime;
-    const dur = vid.duration;
-    if (isFinite(dur) && dur > 0) {
-        // Normal finite duration — show progress bar and full time
-        progFill.style.width = (cur / dur * 100) + "%";
-        timeDsp.textContent  = fmt(cur) + " / " + fmt(dur);
-    } else {
-        // Streaming / duration not yet known — show current time only, no progress fill
-        timeDsp.textContent = fmt(cur);
-        // Don't touch progFill width — leave it where it is
-    }
+vid.addEventListener("timeupdate",()=>{
+    const c=vid.currentTime, d=vid.duration;
+    if(isFinite(d)&&d>0){pf.style.width=(c/d*100)+"%";td.textContent=fmt(c)+" / "+fmt(d)}
+    else td.textContent=fmt(c);
 });
-vid.addEventListener("progress", () => {
-    if (!vid.duration) return;
-    for (let i = 0; i < vid.buffered.length; i++) {
-        if (vid.buffered.start(i) <= vid.currentTime)
-            progBuf.style.width = (vid.buffered.end(i)/vid.duration*100)+"%";
-    }
+vid.addEventListener("progress",()=>{
+    if(!vid.duration)return;
+    for(let i=0;i<vid.buffered.length;i++)
+        if(vid.buffered.start(i)<=vid.currentTime)pb.style.width=(vid.buffered.end(i)/vid.duration*100)+"%";
 });
 
-let scrubbing = false;
-function scrubAt(e) {
-    const r = progRow.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX);
-    const ratio = Math.max(0, Math.min(1, (x-r.left)/r.width));
-    // Only seek if duration is a real finite number — prevents snapping to 0
-    // when duration is Infinity (MKV streams) or NaN (metadata not yet loaded)
-    if (isFinite(vid.duration) && vid.duration > 0) {
-        vid.currentTime = ratio * vid.duration;
-        progFill.style.width = (ratio*100)+"%";
-    }
-    // If duration not known yet, don't move the thumb — scrubbing silently ignored
+let scrub=false;
+function scrubAt(e){
+    const r=prog.getBoundingClientRect();
+    const x=e.touches?e.touches[0].clientX:e.clientX;
+    const ratio=Math.max(0,Math.min(1,(x-r.left)/r.width));
+    if(isFinite(vid.duration)&&vid.duration>0){vid.currentTime=ratio*vid.duration;pf.style.width=(ratio*100)+"%"}
 }
-progRow.addEventListener("mousedown",  e => { scrubbing=true; scrubAt(e); });
-progRow.addEventListener("touchstart", e => { scrubbing=true; scrubAt(e); }, {passive:true});
-document.addEventListener("mousemove", e => { if (scrubbing) scrubAt(e); });
-document.addEventListener("touchmove", e => { if (scrubbing) scrubAt(e); }, {passive:true});
-document.addEventListener("mouseup",   () => scrubbing=false);
-document.addEventListener("touchend",  () => scrubbing=false);
+prog.addEventListener("mousedown", e=>{scrub=true;scrubAt(e)});
+prog.addEventListener("touchstart",e=>{scrub=true;scrubAt(e)},{passive:true});
+document.addEventListener("mousemove",e=>{if(scrub)scrubAt(e)});
+document.addEventListener("touchmove",e=>{if(scrub)scrubAt(e)},{passive:true});
+document.addEventListener("mouseup",  ()=>scrub=false);
+document.addEventListener("touchend", ()=>scrub=false);
 
-function fmt(s) {
-    s = Math.floor(s||0);
-    const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60;
-    return h ? `${h}:${z(m)}:${z(ss)}` : `${m}:${z(ss)}`;
-}
-function z(n){ return String(n).padStart(2,"0"); }
+function fmt(s){s=Math.floor(s||0);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;return h?`${h}:${z(m)}:${z(ss)}`:`${m}:${z(ss)}`}
+function z(n){return String(n).padStart(2,"0")}
 
 // ── Volume ────────────────────────────────────────────────────────────
-function updateVol() {
-    volSlider.value = vid.muted ? 0 : vid.volume;
-    volIco.className = vid.muted||vid.volume===0 ? "fa fa-volume-xmark"
-                     : vid.volume < .5            ? "fa fa-volume-low"
-                     :                              "fa fa-volume-high";
-}
-function toggleMute() { vid.muted = !vid.muted; updateVol(); }
-document.getElementById("btnMute").onclick = toggleMute;
-volSlider.oninput = () => { vid.volume = parseFloat(volSlider.value); vid.muted = vid.volume===0; updateVol(); };
+function updateVol(){vs.value=vid.muted?0:vid.volume;vIco.className=vid.muted||vid.volume===0?"fa fa-volume-xmark":vid.volume<.5?"fa fa-volume-low":"fa fa-volume-high"}
+function toggleMute(){vid.muted=!vid.muted;updateVol()}
+document.getElementById("bMu").onclick=toggleMute;
+vs.oninput=()=>{vid.volume=parseFloat(vs.value);vid.muted=vid.volume===0;updateVol()};
 
 // ── Controls auto-hide ────────────────────────────────────────────────
-let hideTimer;
-function showCtrl() {
-    playerWrap.classList.add("show-ctrl");
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-        if (!vid.paused) playerWrap.classList.remove("show-ctrl");
-    }, 3500);
-}
-playerWrap.addEventListener("mousemove",  showCtrl);
-playerWrap.addEventListener("touchstart", showCtrl, {passive:true});
-playerWrap.addEventListener("mouseenter", showCtrl);
-vid.addEventListener("pause", () => playerWrap.classList.add("show-ctrl"));
-vid.addEventListener("play",  () => showCtrl());
+let _ht;
+function showCtrl(){pw.classList.add("sc");clearTimeout(_ht);_ht=setTimeout(()=>{if(!vid.paused)pw.classList.remove("sc")},3500)}
+pw.addEventListener("mousemove", showCtrl);
+pw.addEventListener("touchstart",showCtrl,{passive:true});
+pw.addEventListener("mouseenter",showCtrl);
 showCtrl();
 
-// ── Rewind / Forward buttons ──────────────────────────────────────────
-document.getElementById("btnRew").onclick = (e) => { e.stopPropagation(); skip(-10); };
-document.getElementById("btnFwd").onclick = (e) => { e.stopPropagation(); skip(10); };
-
-// ── Fullscreen — fullscreen the playerWrap so ctrl bar stays visible ──
-function toggleFs() {
-    const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-    if (!inFs) {
-        const req = playerWrap.requestFullscreen || playerWrap.webkitRequestFullscreen;
-        if (req) req.call(playerWrap);
-    } else {
-        const exit = document.exitFullscreen || document.webkitExitFullscreen;
-        if (exit) exit.call(document);
-    }
+// ── Fullscreen ────────────────────────────────────────────────────────
+// Fullscreen the .pw wrapper so control bar + settings panel are always visible
+function toggleFs(){
+    const inFs=!!(document.fullscreenElement||document.webkitFullscreenElement);
+    if(!inFs){const r=pw.requestFullscreen||pw.webkitRequestFullscreen;if(r)r.call(pw)}
+    else{const x=document.exitFullscreen||document.webkitExitFullscreen;if(x)x.call(document)}
 }
-document.getElementById("btnFs").onclick = (e) => { e.stopPropagation(); toggleFs(); };
-document.addEventListener("fullscreenchange",       () => { fsIco.className = document.fullscreenElement ? "fa fa-compress" : "fa fa-expand"; });
-document.addEventListener("webkitfullscreenchange", () => { fsIco.className = document.webkitFullscreenElement ? "fa fa-compress" : "fa fa-expand"; });
+document.getElementById("bFs").onclick=e=>{e.stopPropagation();toggleFs()};
+document.addEventListener("fullscreenchange",      ()=>{fsI.className=document.fullscreenElement?"fa fa-compress":"fa fa-expand"});
+document.addEventListener("webkitfullscreenchange",()=>{fsI.className=document.webkitFullscreenElement?"fa fa-compress":"fa fa-expand"});
 
 // ── Settings panel ────────────────────────────────────────────────────
-document.getElementById("btnSettings").onclick = (e) => {
-    e.stopPropagation();
-    settingsPan.classList.toggle("open");
-};
-playerWrap.addEventListener("click", (e) => {
-    if (!settingsPan.contains(e.target) && e.target.id !== "btnSettings")
-        settingsPan.classList.remove("open");
-});
+document.getElementById("bSet").onclick=e=>{e.stopPropagation();panel.classList.toggle("open")};
+pw.addEventListener("click",e=>{if(!panel.contains(e.target)&&e.target.id!=="bSet")panel.classList.remove("open")});
 
 // ── Speed ─────────────────────────────────────────────────────────────
-function setSpeed(v) { vid.playbackRate = parseFloat(v); speedSel.value = spSpeedSel.value = v; }
-speedSel.onchange   = () => setSpeed(speedSel.value);
-spSpeedSel.onchange = () => setSpeed(spSpeedSel.value);
+function setSpd(v){vid.playbackRate=parseFloat(v);spdSel.value=spSpd.value=v}
+spdSel.onchange=()=>setSpd(spdSel.value);
+spSpd.onchange= ()=>setSpd(spSpd.value);
 
 // ── Subtitle appearance ───────────────────────────────────────────────
-const SUB_COLORS = [
-    {name:"White",hex:"#ffffff"},{name:"Yellow",hex:"#fde047"},
-    {name:"Cyan",hex:"#67e8f9"},{name:"Green",hex:"#86efac"},
-    {name:"Orange",hex:"#fb923c"},{name:"Pink",hex:"#f9a8d4"},
-    {name:"Red",hex:"#f87171"},{name:"Light Blue",hex:"#93c5fd"},
-];
-let subColor="#ffffff", subBg=true, subSizePct=105;
-function buildColorSwatches() {
-    const wrap = document.getElementById("colorSwatches");
-    SUB_COLORS.forEach(c => {
-        const s = document.createElement("div");
-        s.className="swatch"+(c.hex===subColor?" active":"");
-        s.style.background=c.hex; s.title=c.name;
-        s.onclick=()=>{ wrap.querySelectorAll(".swatch").forEach(x=>x.classList.remove("active")); s.classList.add("active"); subColor=c.hex; applyCueStyle(); };
-        wrap.appendChild(s);
+const COLS=[{n:"White",h:"#ffffff"},{n:"Yellow",h:"#fde047"},{n:"Cyan",h:"#67e8f9"},
+            {n:"Green",h:"#86efac"},{n:"Orange",h:"#fb923c"},{n:"Pink",h:"#f9a8d4"},
+            {n:"Red",h:"#f87171"},{n:"Light Blue",h:"#93c5fd"}];
+let sCol="#ffffff",sBg=true,sSz=105;
+function buildSwatches(){
+    const w=document.getElementById("swatches");
+    COLS.forEach(c=>{
+        const s=document.createElement("div");
+        s.className="sw"+(c.h===sCol?" active":"");s.style.background=c.h;s.title=c.n;
+        s.onclick=()=>{w.querySelectorAll(".sw").forEach(x=>x.classList.remove("active"));s.classList.add("active");sCol=c.h;applyCue()};
+        w.appendChild(s);
     });
 }
-function applyCueStyle() {
-    const bg=subBg?"rgba(0,0,0,0.75)":"transparent", pad=subBg?"2px 6px":"0", size=(subSizePct/100).toFixed(2)+"em";
-    cueStyleEl.textContent=`::cue{font-family:'Inter',Arial,sans-serif;font-size:${size};color:${subColor};background:${bg};border-radius:${subBg?"3px":"0"};padding:${pad};line-height:1.5;}`;
+function applyCue(){
+    const bg=sBg?"rgba(0,0,0,0.75)":"transparent",pad=sBg?"2px 6px":"0",sz=(sSz/100).toFixed(2)+"em";
+    cueEl.textContent=`::cue{font-family:'Inter',Arial,sans-serif;font-size:${sz};color:${sCol};background:${bg};border-radius:${sBg?"3px":"0"};padding:${pad};line-height:1.5;}`;
 }
-document.getElementById("bgToggle").onchange=function(){subBg=this.checked;applyCueStyle();};
-const sizeSlider=document.getElementById("sizeSlider"), sizeVal=document.getElementById("sizeVal");
-sizeSlider.oninput=()=>{subSizePct=parseInt(sizeSlider.value);sizeVal.textContent=subSizePct+"%";applyCueStyle();};
-buildColorSwatches(); applyCueStyle();
+document.getElementById("bgTgl").onchange=function(){sBg=this.checked;applyCue()};
+const szSl=document.getElementById("szSl"),szV=document.getElementById("szV");
+szSl.oninput=()=>{sSz=parseInt(szSl.value);szV.textContent=sSz+"%";applyCue()};
+buildSwatches();applyCue();
 
 // ── External players ──────────────────────────────────────────────────
-const encName=encodeURIComponent(FILE_NAME);
-const isAndroid=/android/i.test(navigator.userAgent);
-const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
-function makeBtn(icon,label,href,cls){
-    const a=document.createElement("a"); a.className="ext-btn"+(cls?" "+cls:"");
-    a.href=href; a.target="_blank"; a.rel="noopener noreferrer";
-    if(icon.startsWith("http")){const img=document.createElement("img");img.src=icon;img.alt=label;a.appendChild(img);}
-    else{const i=document.createElement("i");i.className=icon;a.appendChild(i);}
-    a.appendChild(document.createTextNode(" "+label)); return a;
+const encN=encodeURIComponent(FILE_NAME),isA=/android/i.test(navigator.userAgent),isI=/iphone|ipad|ipod/i.test(navigator.userAgent);
+function mkBtn(ic,lb,hr,cl){
+    const a=document.createElement("a");a.className="eb"+(cl?" "+cl:"");a.href=hr;a.target="_blank";a.rel="noopener noreferrer";
+    if(ic.startsWith("http")){const img=document.createElement("img");img.src=ic;img.alt=lb;a.appendChild(img)}
+    else{const i=document.createElement("i");i.className=ic;a.appendChild(i)}
+    a.appendChild(document.createTextNode(" "+lb));return a;
 }
-function buildExternalButtons(){
-    const wrap=document.getElementById("extBtns");
-    if(isAndroid){
-        wrap.appendChild(makeBtn("https://i.postimg.cc/sx4Msv4T/mx.png","MX Player",`intent:${FILE_URL}#Intent;package=com.mxtech.videoplayer.ad;S.title=${encName};end`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","VLC",`intent:${FILE_URL}#Intent;package=org.videolan.vlc;S.title=${encName};end`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/RVGWYJFF/playit.png","PLAYit",`intent:${FILE_URL}#Intent;package=com.playit.videoplayer;S.title=${encName};end`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/wT9tFQ9Z/km.png","KM Player",`intent:${FILE_URL}#Intent;package=com.kmplayer;S.title=${encName};end`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png","nPlayer",FILE_URL.replace(/^https?/,"nplayer-https")));
-    } else if(isIOS){
-        wrap.appendChild(makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","VLC",`vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(FILE_URL)}`));
-        wrap.appendChild(makeBtn("https://i.postimg.cc/XYJr6NGg/s.png","nPlayer",FILE_URL.replace(/^https?/,"nplayer-https")));
-    } else {
-        const v=makeBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","Open in VLC",`vlc://${FILE_URL}`); v.target="_self"; wrap.appendChild(v);
-        const c=makeBtn("fa fa-copy","Copy URL","#");
-        c.onclick=e=>{e.preventDefault();navigator.clipboard?.writeText(FILE_URL).then(()=>toast("URL copied!")).catch(()=>toast("Copy failed"));};
-        wrap.appendChild(c);
+(function(){
+    const w=document.getElementById("ebs");
+    if(isA){
+        w.appendChild(mkBtn("https://i.postimg.cc/sx4Msv4T/mx.png","MX Player",`intent:${FILE_URL}#Intent;package=com.mxtech.videoplayer.ad;S.title=${encN};end`));
+        w.appendChild(mkBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","VLC",`intent:${FILE_URL}#Intent;package=org.videolan.vlc;S.title=${encN};end`));
+        w.appendChild(mkBtn("https://i.postimg.cc/RVGWYJFF/playit.png","PLAYit",`intent:${FILE_URL}#Intent;package=com.playit.videoplayer;S.title=${encN};end`));
+        w.appendChild(mkBtn("https://i.postimg.cc/wT9tFQ9Z/km.png","KM Player",`intent:${FILE_URL}#Intent;package=com.kmplayer;S.title=${encN};end`));
+        w.appendChild(mkBtn("https://i.postimg.cc/XYJr6NGg/s.png","nPlayer",FILE_URL.replace(/^https?/,"nplayer-https")));
+    }else if(isI){
+        w.appendChild(mkBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","VLC",`vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(FILE_URL)}`));
+        w.appendChild(mkBtn("https://i.postimg.cc/XYJr6NGg/s.png","nPlayer",FILE_URL.replace(/^https?/,"nplayer-https")));
+    }else{
+        const v=mkBtn("https://i.postimg.cc/15TQ4y7B/vlc.png","Open in VLC",`vlc://${FILE_URL}`);v.target="_self";w.appendChild(v);
+        const c=mkBtn("fa fa-copy","Copy URL","#");c.onclick=e=>{e.preventDefault();navigator.clipboard?.writeText(FILE_URL).then(()=>toast("URL copied!")).catch(()=>toast("Copy failed"))};w.appendChild(c);
     }
-    wrap.appendChild(makeBtn("fa fa-download","Download",FILE_URL,"dl"));
+    w.appendChild(mkBtn("fa fa-download","Download",FILE_URL,"dl"));
+})();
+
+// ── Track state ───────────────────────────────────────────────────────
+let subMap={},ntMap={},actSub=-1,octInst=null,octWkr="";
+let actAudio=-1;           // selected audio index (-1 = default)
+let audioSrc=null;         // null = original FILE_URL; string = /audio/ URL
+
+// ── Audio switching ───────────────────────────────────────────────────
+// We switch vid.src to the /audio/ remux endpoint.
+// The server supports ?start=N so we resume from current position.
+// After switching, the 'seeking' event reloads with new ?start= so
+// seeks continue to work (each seek = ffmpeg restart from that position).
+// When user switches BACK to default (-1), we restore FILE_URL which
+// is fully seekable via Range requests — normal seeking resumes.
+
+function audioEndpointUrl(idx, startSec){
+    let u=`${BAS}/audio/${MID}/${idx}?hash=${HSH}`;
+    if(startSec>0.5)u+=`&start=${startSec.toFixed(2)}`;
+    return u;
 }
-buildExternalButtons();
 
-// ── Track info ────────────────────────────────────────────────────────
-let subTrackMap={}, nativeTrackMap={}, activeSubIdx=-1, octopusInst=null, _octWkr="";
-let activeAudioIdx = -1;  // tracks which audio track is selected
+function switchAudio(idx){
+    actAudio=idx;
+    const t=vid.currentTime, playing=!vid.paused;
 
-async function loadTrackInfo(){
-    try{
-        const ctrl=new AbortController(), tid=setTimeout(()=>ctrl.abort(),20000);
-        const res=await fetch(`${BASE}/info/${MSG_ID}?hash=${HASH}`,{signal:ctrl.signal});
-        clearTimeout(tid);
-        if(!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data=await res.json();
-        buildAudioUI(data.audio||[]); buildSubUI(data.subtitles||[]);
-    }catch(e){
-        console.warn("Track info:",e.message);
-        audioSel.innerHTML=spAudioSel.innerHTML='<option value="-1">Default</option>';
-        audioNote.textContent="Could not detect tracks";
-        subSel.innerHTML=spSubSel.innerHTML='<option value="-1">Off</option>';
-        subNote.textContent="Could not detect subtitles";
+    if(idx<0){
+        // Back to original — fully seekable
+        audioSrc=null;
+        vid.src=FILE_URL;
+    }else{
+        audioSrc=audioEndpointUrl(idx,t);
+        vid.src=audioSrc;
     }
+
+    vid.load();
+    vid.addEventListener("loadedmetadata",()=>{
+        if(playing)vid.play().catch(()=>{});
+        if(actSub>=0)setTimeout(()=>switchSub(actSub),400);
+        aN.textContent=idx<0?"Default track":`Track ${idx+1} active`;
+    },{once:true});
 }
 
-// ── Audio ─────────────────────────────────────────────────────────────
+// After audio src-switch, intercept seeks and reload with new ?start=
+// Debounced so rapid progress-bar scrubbing doesn't spam the server
+let _seekTimer=null;
+vid.addEventListener("seeking",()=>{
+    if(!audioSrc)return; // on original FILE_URL — browser handles natively
+    clearTimeout(_seekTimer);
+    _seekTimer=setTimeout(()=>{
+        const t=vid.currentTime, playing=!vid.paused;
+        const newSrc=audioEndpointUrl(actAudio,t);
+        if(vid.src===newSrc)return;
+        audioSrc=newSrc;
+        vid.src=newSrc;
+        vid.load();
+        vid.addEventListener("loadedmetadata",()=>{
+            if(playing)vid.play().catch(()=>{});
+        },{once:true});
+    },400); // 400ms debounce
+});
+
+// ── Build audio UI ────────────────────────────────────────────────────
 function buildAudioUI(tracks){
     function mkOpts(sel){
         sel.innerHTML="";
         if(tracks.length<=1){
-            const lbl=tracks[0]?(tracks[0].lang?`${tracks[0].label} - ${tracks[0].lang}`:tracks[0].label):"Default";
-            sel.innerHTML=`<option value="-1">${lbl}</option>`;
-        } else {
-            tracks.forEach((t,i)=>{
-                const o=document.createElement("option"); o.value=t.index;
-                o.textContent=t.lang?`${t.label} - ${t.lang}`:t.label; if(i===0)o.selected=true; sel.appendChild(o);
-            });
+            const l=tracks[0]?(tracks[0].lang?`${tracks[0].label} - ${tracks[0].lang}`:tracks[0].label):"Default";
+            sel.innerHTML=`<option value="-1">${l}</option>`;
+        }else{
+            tracks.forEach((t,i)=>{const o=document.createElement("option");o.value=t.index;o.textContent=t.lang?`${t.label} - ${t.lang}`:t.label;if(i===0)o.selected=true;sel.appendChild(o)});
         }
     }
-    mkOpts(audioSel); mkOpts(spAudioSel);
-    audioNote.textContent=tracks.length<=1?"Single audio track":`${tracks.length} tracks — select to switch`;
-    const onChange=v=>{
-        const idx = parseInt(v);
-        audioSel.value=spAudioSel.value=v;
-        activeAudioIdx = idx;
-        const ok = applyAudioTrack(idx);
-        if (!ok) audioNote.textContent = "Switching… (tracks not loaded yet)";
-        else audioNote.textContent = `Track ${idx < 0 ? 1 : idx + 1} active`;
-    };
-    audioSel.onchange=()=>onChange(audioSel.value); spAudioSel.onchange=()=>onChange(spAudioSel.value);
+    mkOpts(asSel);mkOpts(spAs);
+    aN.textContent=tracks.length<=1?"Single audio track":`${tracks.length} tracks — select to switch`;
+    const onCh=v=>{asSel.value=spAs.value=v;switchAudio(parseInt(v))};
+    asSel.onchange=()=>onCh(asSel.value);
+    spAs.onchange= ()=>onCh(spAs.value);
 }
-// ── Audio track switching ─────────────────────────────────────────────
-// We ONLY use HTMLMediaElement.audioTracks — no src switching.
-// Src switching breaks seekability because the /audio/ endpoint is a
-// live ffmpeg pipe with no Content-Length and no Range support.
-//
-// audioTracks is populated by Chrome/Edge after the video starts loading.
-// We poll for it until tracks appear, then wire up the selector.
-// The selector shows "Detecting…" until tracks are confirmed.
-
-let _audioTracksWired = false;
-
-function applyAudioTrack(idx) {
-    if (!vid.audioTracks || vid.audioTracks.length === 0) return false;
-    Array.from(vid.audioTracks).forEach((t, i) => {
-        t.enabled = (idx < 0) ? (i === 0) : (i === idx);
-    });
-    return true;
-}
-
-function switchAudio(idx) {
-    activeAudioIdx = idx;
-    const ok = applyAudioTrack(idx);
-    if (!ok) {
-        // Tracks not loaded yet — will be applied when they appear
-        audioNote.textContent = "Switching… (waiting for tracks)";
-    }
-}
-
-// Poll until audioTracks are available, then sync selector with reality
-function pollAudioTracks() {
-    const tracks = vid.audioTracks;
-    if (!tracks || tracks.length === 0) {
-        setTimeout(pollAudioTracks, 500);
-        return;
-    }
-    if (_audioTracksWired) return;
-    _audioTracksWired = true;
-
-    // If we already have ffprobe data, selectors are built — just apply
-    if (activeAudioIdx >= 0) {
-        applyAudioTrack(activeAudioIdx);
-    }
-
-    // If selectors still show "Detecting…", build from live audioTracks
-    if (audioSel.options.length === 1 && audioSel.options[0].value === "-1" &&
-        audioSel.options[0].text === "Detecting…") {
-        const trackList = Array.from(tracks).map((t, i) => ({
-            index: i,
-            label: t.label || `Audio ${i + 1}`,
-            lang:  t.language || "",
-        }));
-        buildAudioUI(trackList);
-    }
-
-    audioNote.textContent = `${tracks.length} track${tracks.length > 1 ? "s" : ""} — select to switch`;
-}
-
-// Start polling as soon as video begins loading
-vid.addEventListener("loadstart",     pollAudioTracks);
-vid.addEventListener("loadedmetadata",pollAudioTracks);
-vid.addEventListener("canplay",       pollAudioTracks);
 
 // ── Subtitles ─────────────────────────────────────────────────────────
 function buildSubUI(tracks){
-    subTrackMap={};
+    subMap={};
     function mkOpts(sel){
         sel.innerHTML='<option value="-1">Off</option>';
         tracks.forEach(t=>{
-            const o=document.createElement("option"); o.value=t.index;
-            o.textContent=t.lang?`${t.label} [${t.lang}]`:t.label; sel.appendChild(o);
-            subTrackMap[t.index]={url:`${BASE}/sub/${MSG_ID}/${t.index}?hash=${HASH}`,fmt:t.codec||"",label:t.label,lang:t.lang||"und"};
+            const o=document.createElement("option");o.value=t.index;
+            o.textContent=t.lang?`${t.label} [${t.lang}]`:t.label;sel.appendChild(o);
+            subMap[t.index]={url:`${BAS}/sub/${MID}/${t.index}?hash=${HSH}`,fmt:t.codec||"",label:t.label,lang:t.lang||"und"};
         });
     }
-    mkOpts(subSel); mkOpts(spSubSel);
-    subNote.textContent=tracks.length===0?"No subtitles":`${tracks.length} track${tracks.length>1?"s":""} available`;
-    const onChange=v=>{subSel.value=spSubSel.value=v; switchSubtitle(parseInt(v));};
-    subSel.onchange=()=>onChange(subSel.value); spSubSel.onchange=()=>onChange(spSubSel.value);
+    mkOpts(ssSel);mkOpts(spSs);
+    sN.textContent=tracks.length===0?"No subtitles":`${tracks.length} track${tracks.length>1?"s":""} available`;
+    const onCh=v=>{ssSel.value=spSs.value=v;switchSub(parseInt(v))};
+    ssSel.onchange=()=>onCh(ssSel.value);
+    spSs.onchange= ()=>onCh(spSs.value);
 }
+
 function clearSubs(){
-    if(octopusInst){try{octopusInst.dispose();}catch(e){}octopusInst=null;}
+    if(octInst){try{octInst.dispose()}catch(e){}octInst=null}
     document.getElementById("subCanvas").innerHTML="";
-    Object.values(nativeTrackMap).forEach(el=>{try{el.track.mode="hidden";}catch(e){}});
+    Object.values(ntMap).forEach(el=>{try{el.track.mode="hidden"}catch(e){}});
 }
-async function switchSubtitle(idx){
-    activeSubIdx=idx; clearSubs(); subSel.value=spSubSel.value=String(idx);
-    if(idx<0||!subTrackMap[idx]){subNote.textContent="Subtitles off";return;}
-    const info=subTrackMap[idx]; subNote.textContent="Loading…";
+
+async function switchSub(idx){
+    actSub=idx;clearSubs();ssSel.value=spSs.value=String(idx);
+    if(idx<0||!subMap[idx]){sN.textContent="Subtitles off";return}
+    const info=subMap[idx];sN.textContent="Loading…";
     try{
-        const head=await fetch(info.url,{method:"HEAD"}).catch(()=>null);
-        const fmt=head?(head.headers.get("X-Subtitle-Format")||info.fmt||"").toLowerCase():(info.fmt||"").toLowerCase();
+        const hd=await fetch(info.url,{method:"HEAD"}).catch(()=>null);
+        const fmt=hd?(hd.headers.get("X-Subtitle-Format")||info.fmt||"").toLowerCase():(info.fmt||"").toLowerCase();
         await showVTT(info);
-        subNote.textContent=`▶ ${info.label}${info.lang&&info.lang!=="und"?" ["+info.lang+"]":""}`;
-        if(fmt==="ass"||fmt==="ssa")trySubOctopus(info);
-    }catch(e){console.error("Subtitle error:",e); subNote.textContent="⚠ "+e.message;}
+        sN.textContent=`▶ ${info.label}${info.lang&&info.lang!=="und"?" ["+info.lang+"]":""}`;
+        if(fmt==="ass"||fmt==="ssa")tryOct(info);
+    }catch(e){console.error("Sub error:",e);sN.textContent="⚠ "+e.message}
 }
+
 async function showVTT(info){
-    const prev=nativeTrackMap[info.index];
-    if(prev&&vid.contains(prev)){vid.removeChild(prev);delete nativeTrackMap[info.index];}
-    const el=document.createElement("track"); el.kind="subtitles"; el.label=info.label; el.srclang=info.lang||"und"; el.src=info.url; el.default=false;
-    vid.appendChild(el); nativeTrackMap[info.index]=el;
-    await new Promise(resolve=>{
-        if(el.readyState===2){resolve();return;}
+    const prev=ntMap[info.index];
+    if(prev&&vid.contains(prev)){vid.removeChild(prev);delete ntMap[info.index]}
+    const el=document.createElement("track");el.kind="subtitles";el.label=info.label;el.srclang=info.lang||"und";el.src=info.url;el.default=false;
+    vid.appendChild(el);ntMap[info.index]=el;
+    await new Promise(res=>{
+        if(el.readyState===2){res();return}
         if(el.readyState===3){
             vid.removeChild(el);
-            const el2=document.createElement("track"); el2.kind="subtitles"; el2.label=info.label; el2.srclang=info.lang||"und"; el2.src=info.url+"&_r="+Date.now();
-            vid.appendChild(el2); nativeTrackMap[info.index]=el2;
-            el2.addEventListener("load",resolve,{once:true}); el2.addEventListener("error",resolve,{once:true}); setTimeout(resolve,8000); return;
+            const e2=document.createElement("track");e2.kind="subtitles";e2.label=info.label;e2.srclang=info.lang||"und";e2.src=info.url+"&_r="+Date.now();
+            vid.appendChild(e2);ntMap[info.index]=e2;
+            e2.addEventListener("load",res,{once:true});e2.addEventListener("error",res,{once:true});setTimeout(res,8000);return;
         }
-        el.addEventListener("load",resolve,{once:true}); el.addEventListener("error",resolve,{once:true}); setTimeout(resolve,8000);
+        el.addEventListener("load",res,{once:true});el.addEventListener("error",res,{once:true});setTimeout(res,8000);
     });
-    Array.from(vid.textTracks).forEach(t=>{t.mode="hidden";});
-    const active=nativeTrackMap[info.index]; if(active?.track)active.track.mode="showing";
+    Array.from(vid.textTracks).forEach(t=>{t.mode="hidden"});
+    const a=ntMap[info.index];if(a?.track)a.track.mode="showing";
 }
-async function trySubOctopus(info){
+
+async function tryOct(info){
     const cdns=[
         {js:"https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus.js",wk:"https://cdnjs.cloudflare.com/ajax/libs/javascript-subtitles-octopus/5.1.0/subtitles-octopus-worker.js"},
         {js:"https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",wk:"https://cdn.jsdelivr.net/npm/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js"},
         {js:"https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus.js",wk:"https://unpkg.com/javascript-subtitles-octopus@5.1.0/dist/subtitles-octopus-worker.js"},
     ];
     if(!window.SubtitlesOctopus){
-        for(const cdn of cdns){
-            try{await new Promise((ok,fail)=>{const s=document.createElement("script");s.src=cdn.js;s.onload=()=>{_octWkr=cdn.wk;ok();};s.onerror=fail;document.head.appendChild(s);});break;}
-            catch(e){console.warn("SubOctopus CDN failed:",cdn.js);}
-        }
+        for(const c of cdns){try{await new Promise((ok,no)=>{const s=document.createElement("script");s.src=c.js;s.onload=()=>{octWkr=c.wk;ok()};s.onerror=no;document.head.appendChild(s)});break}catch(e){console.warn("Oct CDN fail:",c.js)}}
     }
     if(!window.SubtitlesOctopus)return;
     try{
-        const res2=await fetch(info.url);if(!res2.ok)return;
-        const txt2=await res2.text(); const blob=new Blob([txt2],{type:"text/plain"}); const burl=URL.createObjectURL(blob);
-        const wrap=document.getElementById("subCanvas"); wrap.innerHTML="";
-        Array.from(vid.textTracks).forEach(t=>{try{t.mode="hidden";}catch(e){}});
-        octopusInst=new window.SubtitlesOctopus({video:vid,subUrl:burl,workerUrl:_octWkr,renderMode:"wasm-blend",targetFps:24,
-            onReady:()=>URL.revokeObjectURL(burl),
-            onError:(e)=>{URL.revokeObjectURL(burl);if(nativeTrackMap[info.index]?.track)nativeTrackMap[info.index].track.mode="showing";}});
-        setTimeout(()=>{const c=document.querySelector(".libassjs-canvas-parent");if(c){c.style.cssText="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";wrap.appendChild(c);}},300);
-    }catch(e){console.warn("SubOctopus render failed:",e);}
+        const r=await fetch(info.url);if(!r.ok)return;
+        const t=await r.text(),bl=new Blob([t],{type:"text/plain"}),bu=URL.createObjectURL(bl);
+        const w=document.getElementById("subCanvas");w.innerHTML="";
+        Array.from(vid.textTracks).forEach(t=>{try{t.mode="hidden"}catch(e){}});
+        octInst=new window.SubtitlesOctopus({video:vid,subUrl:bu,workerUrl:octWkr,renderMode:"wasm-blend",targetFps:24,
+            onReady:()=>URL.revokeObjectURL(bu),
+            onError:()=>{URL.revokeObjectURL(bu);if(ntMap[info.index]?.track)ntMap[info.index].track.mode="showing"}});
+        setTimeout(()=>{const c=document.querySelector(".libassjs-canvas-parent");if(c){c.style.cssText="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;";w.appendChild(c)}},300);
+    }catch(e){console.warn("Oct fail:",e)}
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────
 let _tt;
-function toast(msg){const el=document.getElementById("toast");el.textContent=msg;el.style.display="block";clearTimeout(_tt);_tt=setTimeout(()=>el.style.display="none",5000);}
+function toast(m){const e=document.getElementById("toast");e.textContent=m;e.style.display="block";clearTimeout(_tt);_tt=setTimeout(()=>e.style.display="none",5000)}
 
-// ── Init ──────────────────────────────────────────────────────────────
-loadTrackInfo();
-showCtrl();
+// ── Track info from server ────────────────────────────────────────────
+async function loadTracks(){
+    try{
+        const ctrl=new AbortController(),tid=setTimeout(()=>ctrl.abort(),20000);
+        const r=await fetch(`${BAS}/info/${MID}?hash=${HSH}`,{signal:ctrl.signal});
+        clearTimeout(tid);
+        if(!r.ok)throw new Error(`HTTP ${r.status}`);
+        const d=await r.json();
+        buildAudioUI(d.audio||[]);
+        buildSubUI(d.subtitles||[]);
+    }catch(e){
+        console.warn("Track info:",e.message);
+        asSel.innerHTML=spAs.innerHTML='<option value="-1">Default</option>';
+        aN.textContent="Could not detect tracks";
+        ssSel.innerHTML=spSs.innerHTML='<option value="-1">Off</option>';
+        sN.textContent="Could not detect subtitles";
+    }
+}
+
+loadTracks();
 </script>
 </body>
 </html>
