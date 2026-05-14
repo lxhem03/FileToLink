@@ -15,81 +15,12 @@ from TechVJ.util.render_template import render_page
 
 routes = web.RouteTableDef()
 
-def srt_to_webvtt(srt_bytes: bytes) -> bytes:
-    """
-    Convert SRT subtitle bytes to strict WebVTT bytes.
-    Guarantees:
-      - UTF-8 encoding (with BOM stripped)
-      - "WEBVTT" header on first line
-      - Timestamps use "." not "," for milliseconds  (Chrome requirement)
-      - Windows line endings normalised to Unix
-      - Blank lines between cues
-      - Sequence numbers removed (optional in WebVTT, cleaner without)
-    """
-    import re as _re
-
-    # Decode — try UTF-8 first, fall back to latin-1
-    try:
-        text = srt_bytes.decode("utf-8-sig")   # strips BOM if present
-    except UnicodeDecodeError:
-        text = srt_bytes.decode("latin-1")
-
-    # Normalise line endings
-    text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
-
-    lines   = text.split("\n")
-    cues    = []
-    i       = 0
-    # SRT timestamp pattern: 00:00:00,000 --> 00:00:00,000
-    ts_pat  = _re.compile(
-        r"^(\d{1,2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{3})"
-    )
-    # ASS/SSA style tag cleaner (ffmpeg sometimes leaks these into SRT output)
-    tag_pat = _re.compile(r"\{[^}]*\}")
-
-    while i < len(lines):
-        line = lines[i].strip()
-
-        # Skip sequence numbers
-        if _re.match(r"^\d+$", line):
-            i += 1
-            continue
-
-        # Timestamp line
-        m = ts_pat.match(line)
-        if m:
-            start = m.group(1).replace(",", ".")   # comma → dot
-            end   = m.group(2).replace(",", ".")
-            i += 1
-            # Collect cue text lines until blank line or EOF
-            cue_lines = []
-            while i < len(lines) and lines[i].strip() != "":
-                cleaned = tag_pat.sub("", lines[i])   # strip {\an8} etc.
-                cue_lines.append(cleaned)
-                i += 1
-            if cue_lines:
-                cues.append(f"{start} --> {end}\n" + "\n".join(cue_lines))
-            continue
-
-        i += 1
-
-    webvtt = "WEBVTT\n\n" + "\n\n".join(cues)
-    if cues:
-        webvtt += "\n"
-
-    return webvtt.encode("utf-8")
-
-
-# Shared cache — same as original
-class_cache = {}
-
 @routes.get("/", allow_head=True)
 async def root_route_handler(request):
     return web.json_response("BenFilterBot")
 
-# ── /watch/ page ──────────────────────────────────────────────────────────────
 @routes.get(r"/watch/{path:\S+}", allow_head=True)
-async def watch_handler(request: web.Request):
+async def stream_handler(request: web.Request):
     try:
         path = request.match_info["path"]
         match = re.search(r"^([a-zA-Z0-9_-]{6})(\d+)$", path)
@@ -110,250 +41,141 @@ async def watch_handler(request: web.Request):
         logging.critical(e.with_traceback(None))
         raise web.HTTPInternalServerError(text=str(e))
 
-# ── /info/{id}?hash= — ffprobe audio/subtitle track list ─────────────────────
+# ── Shared cache ─────────────────────────────────────────────────────
+# class_cache defined above
+
+def srt_to_webvtt(srt_bytes: bytes) -> bytes:
+    import re as _re
+    try: text = srt_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError: text = srt_bytes.decode("latin-1")
+    text = text.replace("\r\n","\n").replace("\r","\n").strip()
+    lines = text.split("\n")
+    cues, i = [], 0
+    ts_pat  = _re.compile(r"^(\d{1,2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{3})")
+    tag_pat = _re.compile(r"\{[^}]*\}")
+    while i < len(lines):
+        line = lines[i].strip()
+        if _re.match(r"^\d+$", line): i+=1; continue
+        m = ts_pat.match(line)
+        if m:
+            start,end = m.group(1).replace(",","."), m.group(2).replace(",",".")
+            i+=1; cl=[]
+            while i<len(lines) and lines[i].strip()!="":
+                cl.append(tag_pat.sub("",lines[i])); i+=1
+            if cl: cues.append(f"{start} --> {end}\n"+"\n".join(cl))
+            continue
+        i+=1
+    return ("WEBVTT\n\n"+"\n\n".join(cues)+("\n" if cues else "")).encode("utf-8")
+
+# ── /info/{id}?hash= ─────────────────────────────────────────────────
 @routes.get(r"/info/{id:\d+}", allow_head=True)
 async def info_handler(request: web.Request):
     try:
-        id          = int(request.match_info["id"])
-        secure_hash = request.rel_url.query.get("hash", "")
-
-        index = min(work_loads, key=work_loads.get)
-        faster_client = multi_clients[index]
-        if faster_client not in class_cache:
-            class_cache[faster_client] = ByteStreamer(faster_client)
-        tg_connect = class_cache[faster_client]
-        file_id = await tg_connect.get_file_properties(id)
-        if file_id.unique_id[:6] != secure_hash:
-            raise web.HTTPForbidden(text="Invalid hash")
-
+        id=int(request.match_info["id"]); secure_hash=request.rel_url.query.get("hash","")
+        index=min(work_loads,key=work_loads.get); faster_client=multi_clients[index]
+        if faster_client not in class_cache: class_cache[faster_client]=ByteStreamer(faster_client)
+        tg=class_cache[faster_client]; file_id=await tg.get_file_properties(id)
+        if file_id.unique_id[:6]!=secure_hash: raise web.HTTPForbidden(text="Invalid hash")
         from urllib.parse import quote_plus
-        file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
-
-        cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", file_url]
-        proc = await asyncio.create_subprocess_exec(*cmd,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-        except asyncio.TimeoutError:
-            return web.json_response({"audio": [], "subtitles": [], "error": "probe timeout"},
-                                     headers={"Access-Control-Allow-Origin": "*"})
-
-        audio_tracks, subtitle_tracks = [], []
+        file_url=f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
+        cmd=["ffprobe","-v","quiet","-print_format","json","-show_streams",file_url]
+        proc=await asyncio.create_subprocess_exec(*cmd,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        try: stdout,_=await asyncio.wait_for(proc.communicate(),timeout=30)
+        except asyncio.TimeoutError: return web.json_response({"audio":[],"subtitles":[],"error":"timeout"},headers={"Access-Control-Allow-Origin":"*"})
+        audio,subs=[],[]
         if stdout:
             try:
-                aidx = sidx = 0
-                for stream in _json.loads(stdout).get("streams", []):
-                    ctype = stream.get("codec_type", "")
-                    tags  = stream.get("tags", {})
-                    lang  = tags.get("language", tags.get("LANGUAGE", ""))
-                    title = tags.get("title", tags.get("TITLE", ""))
-                    if ctype == "audio":
-                        audio_tracks.append({"index": aidx, "label": title or f"Audio {aidx+1}", "lang": lang})
-                        aidx += 1
-                    elif ctype == "subtitle":
-                        codec = stream.get("codec_name", "")
-                        if codec in ("subrip","srt","ass","ssa","webvtt","mov_text","hdmv_pgs_subtitle"):
-                            subtitle_tracks.append({"index": sidx, "label": title or f"Subtitle {sidx+1}", "lang": lang, "codec": codec})
-                        sidx += 1
-            except Exception as e:
-                logging.warning(f"ffprobe parse error: {e}")
+                ai=si=0
+                for s in _json.loads(stdout).get("streams",[]):
+                    ct=s.get("codec_type",""); tags=s.get("tags",{})
+                    lang=tags.get("language",tags.get("LANGUAGE",""))
+                    title=tags.get("title",tags.get("TITLE",""))
+                    if ct=="audio": audio.append({"index":ai,"label":title or f"Audio {ai+1}","lang":lang}); ai+=1
+                    elif ct=="subtitle":
+                        codec=s.get("codec_name","")
+                        if codec in("subrip","srt","ass","ssa","webvtt","mov_text","hdmv_pgs_subtitle"):
+                            subs.append({"index":si,"label":title or f"Subtitle {si+1}","lang":lang,"codec":codec})
+                        si+=1
+            except Exception as e: logging.warning(f"ffprobe parse: {e}")
+        return web.json_response({"audio":audio,"subtitles":subs},headers={"Access-Control-Allow-Origin":"*"})
+    except web.HTTPForbidden: raise
+    except Exception as e: logging.error(f"info_handler: {e}"); return web.json_response({"audio":[],"subtitles":[],"error":str(e)},headers={"Access-Control-Allow-Origin":"*"})
 
-        return web.json_response({"audio": audio_tracks, "subtitles": subtitle_tracks},
-                                 headers={"Access-Control-Allow-Origin": "*"})
-    except web.HTTPForbidden:
-        raise
-    except Exception as e:
-        logging.error(f"Info handler: {e}")
-        return web.json_response({"audio": [], "subtitles": [], "error": str(e)},
-                                 headers={"Access-Control-Allow-Origin": "*"})
-
-# ── /audio/{id}/{track}?hash= — remux with selected audio track ───────────────
+# ── /audio/{id}/{track}?hash=&start= ─────────────────────────────────
 @routes.get(r"/audio/{id:\d+}/{track:\d+}", allow_head=True)
 async def audio_handler(request: web.Request):
     try:
-        id          = int(request.match_info["id"])
-        track_index = int(request.match_info["track"])
-        secure_hash = request.rel_url.query.get("hash", "")
-
-        index = min(work_loads, key=work_loads.get)
-        faster_client = multi_clients[index]
-        if faster_client not in class_cache:
-            class_cache[faster_client] = ByteStreamer(faster_client)
-        tg_connect = class_cache[faster_client]
-        file_id = await tg_connect.get_file_properties(id)
-        if file_id.unique_id[:6] != secure_hash:
-            raise web.HTTPForbidden(text="Invalid hash")
-
+        id=int(request.match_info["id"]); track=int(request.match_info["track"])
+        secure_hash=request.rel_url.query.get("hash","")
+        start_sec=float(request.rel_url.query.get("start","0") or "0")
+        index=min(work_loads,key=work_loads.get); faster_client=multi_clients[index]
+        if faster_client not in class_cache: class_cache[faster_client]=ByteStreamer(faster_client)
+        tg=class_cache[faster_client]; file_id=await tg.get_file_properties(id)
+        if file_id.unique_id[:6]!=secure_hash: raise web.HTTPForbidden(text="Invalid hash")
         from urllib.parse import quote_plus
-        file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
-
-        # Support -ss seek offset so browser Range-based seeking works.
-        # When the browser seeks, it sends a Range header. We can't honour
-        # byte-level Range on a transcoded stream, but we CAN accept a
-        # ?start=SECONDS query param that the client appends when seeking,
-        # and pass it to ffmpeg as -ss so the stream starts at the right time.
-        start_sec = request.rel_url.query.get("start", "0")
-        try:
-            start_sec = max(0.0, float(start_sec))
-        except (ValueError, TypeError):
-            start_sec = 0.0
-
-        cmd = [
-            "ffmpeg", "-v", "quiet", "-nostdin",
-        ]
-        if start_sec > 0:
-            cmd += ["-ss", str(start_sec)]
-        cmd += [
-            "-i", file_url,
-            "-map", "0:v:0", "-map", f"0:a:{track_index}",
-            "-c", "copy", "-f", "matroska", "pipe:1"
-        ]
-        proc = await asyncio.create_subprocess_exec(*cmd,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-
-        response = web.StreamResponse(status=200, headers={
-            "Content-Type": "video/webm",
-            "Content-Disposition": f'inline; filename="{file_id.file_name}"',
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "no-cache",
-            "X-Audio-Track": str(track_index),
-        })
-        await response.prepare(request)
+        file_url=f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
+        cmd=["ffmpeg","-v","quiet","-nostdin"]
+        if start_sec>0.5: cmd+=["-ss",str(round(start_sec,2))]
+        cmd+=["-i",file_url,"-map","0:v:0","-map",f"0:a:{track}","-c","copy","-f","matroska","pipe:1"]
+        proc=await asyncio.create_subprocess_exec(*cmd,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        resp=web.StreamResponse(status=200,headers={"Content-Type":"video/webm","Content-Disposition":f'inline; filename="{file_id.file_name}"',
+            "Access-Control-Allow-Origin":"*","Cache-Control":"no-cache","X-Audio-Track":str(track)})
+        await resp.prepare(request)
         try:
             while True:
-                chunk = await proc.stdout.read(1024 * 256)
-                if not chunk:
-                    break
-                await response.write(chunk)
+                chunk=await proc.stdout.read(1024*256)
+                if not chunk: break
+                await resp.write(chunk)
         finally:
             try: proc.kill()
             except: pass
             await proc.wait()
-        await response.write_eof()
-        return response
-    except web.HTTPForbidden:
-        raise
-    except ConnectionResetError:
-        pass
-    except Exception as e:
-        logging.error(f"Audio handler: {e}")
-        raise web.HTTPInternalServerError(text=str(e))
+        await resp.write_eof(); return resp
+    except web.HTTPForbidden: raise
+    except ConnectionResetError: pass
+    except Exception as e: logging.error(f"audio_handler: {e}"); raise web.HTTPInternalServerError(text=str(e))
 
-# ── /sub/{id}/{track}?hash= — extract subtitle as ASS or WebVTT ──────────────
-_sub_cache: dict = {}
-_sub_codec_cache: dict = {}
+# ── /sub/{id}/{track}?hash= ──────────────────────────────────────────
+_sub_cache={}; _sub_codec_cache={}
 
 @routes.get(r"/sub/{id:\d+}/{track:\d+}", allow_head=True)
-async def subtitle_handler(request: web.Request):
+async def sub_handler(request: web.Request):
     try:
-        id          = int(request.match_info["id"])
-        track_index = int(request.match_info["track"])
-        secure_hash = request.rel_url.query.get("hash", "")
-
-        index = min(work_loads, key=work_loads.get)
-        faster_client = multi_clients[index]
-        if faster_client not in class_cache:
-            class_cache[faster_client] = ByteStreamer(faster_client)
-        tg_connect = class_cache[faster_client]
-        file_id = await tg_connect.get_file_properties(id)
-        if file_id.unique_id[:6] != secure_hash:
-            raise web.HTTPForbidden(text="Invalid hash")
-
-        cache_key = (id, track_index)
-        if cache_key in _sub_cache:
-            data, ctype, fmt = _sub_cache[cache_key]
-            return web.Response(
-                body=data,
-                content_type="text/vtt",
-                charset="utf-8",
-                headers={
-                    "Access-Control-Allow-Origin":  "*",
-                    "Access-Control-Allow-Headers": "*",
-                    "X-Subtitle-Format":            fmt,
-                    "Cache-Control":                "public, max-age=86400",
-                }
-            )
-
+        id=int(request.match_info["id"]); ti=int(request.match_info["track"])
+        secure_hash=request.rel_url.query.get("hash","")
+        index=min(work_loads,key=work_loads.get); faster_client=multi_clients[index]
+        if faster_client not in class_cache: class_cache[faster_client]=ByteStreamer(faster_client)
+        tg=class_cache[faster_client]; file_id=await tg.get_file_properties(id)
+        if file_id.unique_id[:6]!=secure_hash: raise web.HTTPForbidden(text="Invalid hash")
+        ck=(id,ti)
+        if ck in _sub_cache:
+            data,fmt=_sub_cache[ck]
+            return web.Response(body=data,content_type="text/vtt",charset="utf-8",headers={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"*","X-Subtitle-Format":fmt,"Cache-Control":"public, max-age=86400"})
         from urllib.parse import quote_plus
-        file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
-
-        codec = _sub_codec_cache.get(cache_key, "")
+        file_url=f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
+        codec=_sub_codec_cache.get(ck,"")
         if not codec:
             try:
-                pp = await asyncio.create_subprocess_exec(
-                    "ffprobe", "-v", "quiet", "-print_format", "json",
-                    "-show_streams", "-select_streams", "s", file_url,
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                pout, _ = await asyncio.wait_for(pp.communicate(), timeout=20)
-                streams = _json.loads(pout).get("streams", [])
-                if track_index < len(streams):
-                    codec = streams[track_index].get("codec_name", "")
-            except Exception:
-                codec = ""
+                pp=await asyncio.create_subprocess_exec("ffprobe","-v","quiet","-print_format","json","-show_streams","-select_streams","s",file_url,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+                po,_=await asyncio.wait_for(pp.communicate(),timeout=20)
+                streams=_json.loads(po).get("streams",[])
+                if ti<len(streams): codec=streams[ti].get("codec_name","")
+            except: codec=""
+        is_ass=codec in("ass","ssa"); fmt="ass" if is_ass else "webvtt"
+        cmd=["ffmpeg","-nostdin","-probesize","50M","-analyzeduration","0","-i",file_url,"-map",f"0:s:{ti}","-f","srt","pipe:1"]
+        proc=await asyncio.create_subprocess_exec(*cmd,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        try: stdout,stderr=await asyncio.wait_for(proc.communicate(),timeout=120)
+        except asyncio.TimeoutError: proc.kill(); await proc.wait(); raise web.HTTPGatewayTimeout(text="Subtitle timeout")
+        if proc.returncode!=0 or not stdout:
+            err=stderr.decode(errors="replace")[:300]; logging.warning(f"sub fail id={id} t={ti}: {err}")
+            raise web.HTTPNotFound(text=f"Subtitle failed: {err[:100]}")
+        vtt=srt_to_webvtt(stdout)
+        _sub_cache[ck]=(vtt,fmt); _sub_codec_cache[ck]=codec
+        return web.Response(body=vtt,content_type="text/vtt",charset="utf-8",headers={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"*","X-Subtitle-Format":fmt,"Cache-Control":"public, max-age=86400"})
+    except (web.HTTPForbidden,web.HTTPNotFound,web.HTTPGatewayTimeout): raise
+    except InvalidHash: raise web.HTTPForbidden(text="Invalid hash")
+    except Exception as e: logging.error(f"sub_handler: {e}",exc_info=True); raise web.HTTPInternalServerError(text=str(e))
 
-        is_ass = codec in ("ass", "ssa")
-
-        # Step 1: Extract as SRT first (most compatible ffmpeg output)
-        # SRT is simpler and ffmpeg rarely garbles it.
-        # Step 2: We convert SRT→WebVTT in Python to guarantee:
-        #   - Correct "WEBVTT" header on line 1
-        #   - Timestamps use "." not "," for milliseconds
-        #   - File is valid UTF-8
-        #   - No BOM, no Windows line endings
-        # This fixes Chrome silently rejecting malformed WebVTT.
-
-        cmd = [
-            "ffmpeg", "-nostdin",
-            "-probesize", "50M",
-            "-analyzeduration", "0",
-            "-i", file_url,
-            "-map", f"0:s:{track_index}",
-            "-f", "srt",        # extract as SRT — more reliable than webvtt from ffmpeg
-            "pipe:1"
-        ]
-        proc = await asyncio.create_subprocess_exec(*cmd,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-        except asyncio.TimeoutError:
-            proc.kill(); await proc.wait()
-            raise web.HTTPGatewayTimeout(text="Subtitle extraction timed out")
-
-        if proc.returncode != 0 or not stdout:
-            err = stderr.decode(errors="replace")[:400]
-            logging.warning(f"ffmpeg sub failed id={id} track={track_index}: {err}")
-            raise web.HTTPNotFound(text=f"Subtitle extraction failed: {err[:150]}")
-
-        # Step 2: Convert SRT bytes → strict WebVTT string in Python
-        webvtt_bytes = srt_to_webvtt(stdout)
-
-        ctype = "text/vtt; charset=utf-8"
-        fmt   = "ass" if is_ass else "webvtt"
-
-        _sub_cache[cache_key]       = (webvtt_bytes, ctype, fmt)
-        _sub_codec_cache[cache_key] = codec
-        logging.info(f"Subtitle ready id={id} track={track_index} codec={codec} size={len(webvtt_bytes)}B")
-
-        return web.Response(
-            body=webvtt_bytes,
-            content_type="text/vtt",
-            charset="utf-8",
-            headers={
-                "Access-Control-Allow-Origin":  "*",
-                "Access-Control-Allow-Headers": "*",
-                "X-Subtitle-Format":            fmt,
-                "Cache-Control":                "public, max-age=86400",
-            }
-        )
-    except (web.HTTPForbidden, web.HTTPNotFound, web.HTTPGatewayTimeout):
-        raise
-    except InvalidHash:
-        raise web.HTTPForbidden(text="Invalid hash")
-    except Exception as e:
-        logging.error(f"Subtitle handler: {e}", exc_info=True)
-        raise web.HTTPInternalServerError(text=str(e))
-
-# ── /{path} — file download/stream (ORIGINAL logic, unchanged) ────────────────
 @routes.get(r"/{path:\S+}", allow_head=True)
 async def stream_handler(request: web.Request):
     try:
@@ -376,28 +198,32 @@ async def stream_handler(request: web.Request):
         logging.critical(e.with_traceback(None))
         raise web.HTTPInternalServerError(text=str(e))
 
-async def media_streamer(request: web.Request, id: int, secure_hash: str):
-    # ORIGINAL logic restored exactly — do not modify this function
-    range_header = request.headers.get("Range", 0)
+# class_cache defined above
 
+async def media_streamer(request: web.Request, id: int, secure_hash: str):
+    range_header = request.headers.get("Range", 0)
+    
     index = min(work_loads, key=work_loads.get)
     faster_client = multi_clients[index]
-
+    
     if MULTI_CLIENT:
         logging.info(f"Client {index} is now serving {request.remote}")
 
     if faster_client in class_cache:
         tg_connect = class_cache[faster_client]
+        logging.debug(f"Using cached ByteStreamer object for client {index}")
     else:
+        logging.debug(f"Creating new ByteStreamer object for client {index}")
         tg_connect = ByteStreamer(faster_client)
         class_cache[faster_client] = tg_connect
-
+    logging.debug("before calling get_file_properties")
     file_id = await tg_connect.get_file_properties(id)
-
+    logging.debug("after calling get_file_properties")
+    
     if file_id.unique_id[:6] != secure_hash:
         logging.debug(f"Invalid hash for message with ID {id}")
         raise InvalidHash
-
+    
     file_size = file_id.file_size
 
     if range_header:
@@ -421,9 +247,9 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
     offset = from_bytes - (from_bytes % chunk_size)
     first_part_cut = from_bytes - offset
     last_part_cut = until_bytes % chunk_size + 1
+
     req_length = until_bytes - from_bytes + 1
     part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
-
     body = tg_connect.yield_file(
         file_id, index, offset, first_part_cut, last_part_cut, part_count, chunk_size
     )
@@ -440,7 +266,7 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
                 file_name = f"{secrets.token_hex(2)}.unknown"
     else:
         if file_name:
-            mime_type = mimetypes.guess_type(file_id.file_name)[0] or "application/octet-stream"
+            mime_type = mimetypes.guess_type(file_id.file_name)
         else:
             mime_type = "application/octet-stream"
             file_name = f"{secrets.token_hex(2)}.unknown"
@@ -452,7 +278,7 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
             "Content-Type": f"{mime_type}",
             "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
             "Content-Length": str(req_length),
-            "Content-Disposition": f'''attachment; filename="{file_name}"''',
+            "Content-Disposition": f'{disposition}; filename="{file_name}"',
             "Accept-Ranges": "bytes",
         },
     )
