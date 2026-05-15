@@ -140,9 +140,17 @@ async def info_handler(request: web.Request):
                                  headers={"Access-Control-Allow-Origin": "*"})
 
 
-# ── /audio/{id}/{track}?hash=&start= — ffmpeg fragmented MP4 with selected audio
-# Uses -movflags frag_keyframe+empty_moov so Chrome can seek into it properly.
-# Accepts ?start=SECONDS so the stream begins at the right timestamp.
+# ── /audio/{id}/{track}?hash=&start= ─────────────────────────────────
+# Remuxes the file with only the selected audio track.
+# Key decisions:
+#   -ss BEFORE -i  = input seek (fast, no decode overhead)
+#   -c copy        = stream copy, no re-encode (preserves original audio,
+#                    fixes sync, instant, zero CPU waste)
+#   -f matroska    = MKV container (supports all audio codecs natively,
+#                    unlike MP4 which requires AAC/MP3)
+#   video/webm     = MIME type Chrome accepts for MKV/WebM streams
+# The stream is not range-seekable (pipe), but seeking is handled by the
+# client reloading with a new ?start= value.
 @routes.get(r"/audio/{id:\d+}/{track:\d+}", allow_head=True)
 async def audio_handler(request: web.Request):
     try:
@@ -166,19 +174,17 @@ async def audio_handler(request: web.Request):
         file_url = f"{URL}{id}/{quote_plus(file_id.file_name)}?hash={secure_hash}"
 
         cmd = ["ffmpeg", "-v", "quiet", "-nostdin"]
+        # Input seek BEFORE -i = fast seek (decoder skips to keyframe directly)
+        # This is much faster than output seek (-ss after -i)
         if start_sec > 0.5:
             cmd += ["-ss", str(round(start_sec, 2))]
         cmd += [
             "-i", file_url,
             "-map", "0:v:0",
             "-map", f"0:a:{track}",
-            "-c:v", "copy",        # copy video — no re-encode
-            "-c:a", "aac",         # re-encode audio to AAC (browser-compatible)
-            "-b:a", "128k",
-            "-f", "mp4",
-            # frag_keyframe+empty_moov = fragmented MP4
-            # Chrome can seek into a fragmented MP4 stream without needing Content-Length
-            "-movflags", "frag_keyframe+empty_moov+faststart",
+            "-c", "copy",          # stream copy — no re-encode at all
+            "-f", "matroska",      # MKV container — accepts any audio codec
+            "-cluster_size_limit", "2M",  # smaller clusters = faster start
             "pipe:1"
         ]
 
@@ -188,7 +194,7 @@ async def audio_handler(request: web.Request):
         resp = web.StreamResponse(
             status=200,
             headers={
-                "Content-Type":        "video/mp4",
+                "Content-Type":        "video/webm",  # Chrome plays MKV as video/webm
                 "Content-Disposition": f'inline; filename="{file_id.file_name}"',
                 "Access-Control-Allow-Origin": "*",
                 "Cache-Control":       "no-cache",
