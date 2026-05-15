@@ -360,63 +360,46 @@ function mkBtn(ic,lb,hr,cl) {
 
 // ── Track state ───────────────────────────────────────────────────────
 let subMap={}, ntMap={}, actSub=-1, octInst=null, octWkr="";
-let actAudio=-1;      // -1 = default
-let audioSrcUrl=null; // null = FILE_URL; string = /audio/ endpoint
+let actAudio = -1;
 
-// ── Audio — Method 1 from the article ────────────────────────────────
-// When user picks a track:
-// 1. Save currentTime
-// 2. Change vid.src to /audio/{id}/{track}?hash=&start=currentTime
-//    Server: ffmpeg -ss start -i file -map 0:v:0 -map 0:a:track -c:v copy -c:a aac
-//            -f mp4 -movflags frag_keyframe+empty_moov pipe:1
-//    The fragmented MP4 output IS seekable by Chrome — it can read the
-//    keyframe index from the moov box and issue range-like seeks within
-//    the pipe using the presentation timestamps.
-// 3. On canplay, resume playback
-// When switching back to default (-1), restore FILE_URL (range-seekable).
+// ── Audio — native audioTracks API (no src change, instant, zero CPU) ─
+// Chrome/Edge populate vid.audioTracks from the MKV stream automatically.
+// We just enable the selected track and disable the rest.
+// The video src NEVER changes — full seekability is always preserved.
+//
+// audioTracks are populated asynchronously (sometime after loadstart).
+// We listen for multiple events and try on each until tracks appear.
 
-function audioSrcFor(idx, startSec) {
-    if (idx < 0) return FILE_URL;
-    let u = `${BAS}/audio/${MID}/${idx}?hash=${HSH}`;
-    if (startSec > 0.5) u += `&start=${startSec.toFixed(2)}`;
-    return u;
+function applyAudioTrack(idx) {
+    if (!vid.audioTracks || vid.audioTracks.length === 0) return false;
+    const n = vid.audioTracks.length;
+    Array.from(vid.audioTracks).forEach((t, i) => {
+        t.enabled = idx < 0 ? (i === 0) : (i === idx);
+    });
+    return true;
 }
 
 function switchAudio(idx) {
     actAudio = idx;
-    const t = vid.currentTime, playing = !vid.paused;
-
-    audioSrcUrl = idx < 0 ? null : audioSrcFor(idx, t);
-    vid.src = audioSrcUrl || FILE_URL;
-    vid.load();
-
-    vid.addEventListener("canplay", () => {
-        if (playing) vid.play().catch(() => {});
-        aN.textContent = idx < 0 ? "Default track" : `Track ${idx+1} active`;
-        if (actSub >= 0) setTimeout(() => switchSub(actSub), 400);
-    }, { once: true });
+    const ok = applyAudioTrack(idx);
+    if (ok) {
+        aN.textContent = idx < 0 ? "Default track" : `Track ${idx + 1} active`;
+    } else {
+        // Tracks not populated yet — will be applied when they appear
+        aN.textContent = "Applying…";
+    }
 }
 
-// After an audio-track switch, the browser CAN seek into the fragmented MP4.
-// BUT: if the user seeks far from the start position, the frag MP4 may not
-// have the right keyframe in the buffer. We detect this and reload with
-// the new start= so ffmpeg starts from the right I-frame.
-let _skTimer = null;
-vid.addEventListener("seeking", () => {
-    if (!audioSrcUrl) return; // on original FILE_URL — native range seek
-    clearTimeout(_skTimer);
-    _skTimer = setTimeout(() => {
-        // If we've seeked and the video stalls for > 1.5s, reload from new pos
-        const t = vid.currentTime, playing = !vid.paused;
-        const newSrc = audioSrcFor(actAudio, t);
-        if (newSrc === vid.src) return; // already at right url
-        audioSrcUrl = newSrc;
-        vid.src = newSrc;
-        vid.load();
-        vid.addEventListener("canplay", () => {
-            if (playing) vid.play().catch(() => {});
-        }, { once: true });
-    }, 500);
+// Re-try applying the selected track each time we get new media events
+function tryApplyPendingTrack() {
+    if (actAudio < 0 && (!vid.audioTracks || vid.audioTracks.length <= 1)) return;
+    if (applyAudioTrack(actAudio)) {
+        aN.textContent = actAudio < 0 ? "Default track" : `Track ${actAudio + 1} active`;
+    }
+}
+
+["loadstart","loadedmetadata","canplay","play","playing"].forEach(ev => {
+    vid.addEventListener(ev, tryApplyPendingTrack);
 });
 
 // ── Build audio UI ────────────────────────────────────────────────────
@@ -438,6 +421,16 @@ function buildAudioUI(tracks) {
     const onCh = v => { asSel.value=spAs.value=v; switchAudio(parseInt(v)); };
     asSel.onchange = () => onCh(asSel.value);
     spAs.onchange  = () => onCh(spAs.value);
+
+    // If live audioTracks are already populated (race condition),
+    // override ffprobe labels with the real browser track data
+    if (vid.audioTracks && vid.audioTracks.length > 1 && tracks.length <= 1) {
+        // ffprobe saw 1 track but browser sees more — rebuild from live data
+        const liveTracks = Array.from(vid.audioTracks).map((t, i) => ({
+            index: i, label: t.label || `Audio ${i+1}`, lang: t.language || ""
+        }));
+        buildAudioUI(liveTracks);
+    }
 }
 
 // ── Subtitles ─────────────────────────────────────────────────────────
