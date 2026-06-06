@@ -20,7 +20,8 @@ if 'DYNO' in environ:
     ON_HEROKU = True
 else:
     ON_HEROKU = False
-URL = environ.get("URL", "https://given-maura-telegram-guys-c4d2e66b.koyeb.app/")
+URL = environ.get("URL", "https://filestreamerobot-d0d79d1916b1.herokuapp.com/")
+PERM_URL = environ.get("PERM_URL", "https://given-maura-telegram-guys-c4d2e66b.koyeb.app/")
 START_IMG = environ.get("START_IMG", "https://files.catbox.moe/lllex3.jpg")
 
 # Admins, Channels & Users
