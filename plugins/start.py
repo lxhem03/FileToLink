@@ -2,7 +2,7 @@ import humanize
 from Script import script
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
-from info import URL, LOG_CHANNEL, SHORTLINK, START_IMG
+from info import PERM_URL, URL, LOG_CHANNEL, SHORTLINK, START_IMG
 from urllib.parse import quote_plus, unquote_plus
 from TechVJ.util.file_properties import get_name, get_hash, get_media_file_size
 from TechVJ.util.human_readable import humanbytes
@@ -87,11 +87,11 @@ async def stream_start(client, message):
     file_size  = humanbytes(get_media_file_size(message))
 
     if not SHORTLINK:
-        stream   = f"{URL}watch/{log_msg.id}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
-        download = f"{URL}{log_msg.id}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
+        stream   = f"{PERM_URL}watch/{log_msg.id}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
+        download = f"{PERM_URL}{log_msg.id}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}"
     else:
-        stream   = await get_shortlink(f"{URL}watch/{log_msg.id}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}")
-        download = await get_shortlink(f"{URL}{log_msg.id}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}")
+        stream   = await get_shortlink(f"{PERM_URL}watch/{log_msg.id}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}")
+        download = await get_shortlink(f"{PERM_URL}{log_msg.id}/{quote_plus(get_name(log_msg))}?hash={get_hash(log_msg)}")
 
     # ── Log channel reply (clean, readable, HTML) ──────────────────────
     log_text = (
