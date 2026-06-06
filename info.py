@@ -4,10 +4,10 @@ from os import environ
 id_pattern = re.compile(r'^.\d+$')
 
 # Bot information
-SESSION = environ.get('SESSION', 'F2L')
-API_ID = int(environ.get('API_ID', ''))
-API_HASH = environ.get('API_HASH', '')
-BOT_TOKEN = environ.get('BOT_TOKEN', "")
+SESSION = environ.get('SESSION', 'filestreamerobot')
+API_ID = int(environ.get('API_ID', '39545686'))
+API_HASH = environ.get('API_HASH', '0ed4ebf411d1dc0fc63b821a08ad889b')
+BOT_TOKEN = environ.get('BOT_TOKEN', "8855631815:AAEq8R_GQBsLC4aCUxPd4Wlq93LutksB36U")
 
 # Bot settings
 PORT = environ.get("PORT", "8080")
@@ -28,7 +28,7 @@ LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-1002458319512'))
 ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ.get('ADMINS', '1705634892').split()]
 
 # MongoDB information
-DATABASE_URI = environ.get('DATABASE_URI', "")
+DATABASE_URI = environ.get('DATABASE_URI', "mongodb+srv://RahulPrince720:Q7qg69E1oH30LT6d@cluster0.fb0ldjk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 DATABASE_NAME = environ.get('DATABASE_NAME', "FileXstreamerobot")
 
 # Shortlink Info
