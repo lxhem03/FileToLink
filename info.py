@@ -7,7 +7,7 @@ id_pattern = re.compile(r'^.\d+$')
 SESSION = environ.get('SESSION', 'filestreamerobot')
 API_ID = int(environ.get('API_ID', '39545686'))
 API_HASH = environ.get('API_HASH', '0ed4ebf411d1dc0fc63b821a08ad889b')
-BOT_TOKEN = environ.get('BOT_TOKEN', "8855631815:AAEq8R_GQBsLC4aCUxPd4Wlq93LutksB36U")
+BOT_TOKEN = environ.get('BOT_TOKEN', "7512502745:AAGrYncp4MxX94DVelrGYYeWV0_LB7M0aRE")
 
 # Bot settings
 PORT = environ.get("PORT", "8080")
